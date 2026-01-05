@@ -1,15 +1,38 @@
-# EmitSoundEditor
+﻿# EmitSoundEditor
 
-Overrides weapon fire sounds using Store API equipment state and per-weapon configuration.
+[![中文版介绍](https://img.shields.io/badge/跳转到中文版-中文介绍-red)](#中文版介绍)
+[![Release](https://img.shields.io/github/v/release/DearCrazyLeaf/EmitSoundEditor?include_prereleases&color=blueviolet)](https://github.com/DearCrazyLeaf/EmitSoundEditor/releases/latest)
+[![License](https://img.shields.io/badge/License-GPL%203.0-orange)](https://www.gnu.org/licenses/gpl-3.0.txt)
+[![Issues](https://img.shields.io/github/issues/DearCrazyLeaf/EmitSoundEditor?color=darkgreen)](https://github.com/DearCrazyLeaf/EmitSoundEditor/issues)
+[![Pull Requests](https://img.shields.io/github/issues-pr/DearCrazyLeaf/EmitSoundEditor?color=blue)](https://github.com/DearCrazyLeaf/EmitSoundEditor/pulls)
+[![Downloads](https://img.shields.io/github/downloads/DearCrazyLeaf/EmitSoundEditor/total?color=brightgreen)](https://github.com/DearCrazyLeaf/EmitSoundEditor/releases)
+[![GitHub Stars](https://img.shields.io/github/stars/DearCrazyLeaf/EmitSoundEditor?color=yellow)](https://github.com/DearCrazyLeaf/EmitSoundEditor/stargazers)
+[![Wiki](https://img.shields.io/badge/Wiki-Documentation-4C8BF5)](https://github.com/DearCrazyLeaf/EmitSoundEditor/wiki)
 
-## Quick start
+**A Counter-Strike 2 server plugin that replaces weapon fire sounds based on equipped custom subclasses or official weapon definitions**
 
-1) Build the plugin and copy the output under `counterstrikesharp/plugins/EmitSoundEditor/`.
-2) Create `EmitSoundEditor.json` next to the plugin DLL.
-3) Add overrides for custom subclasses and (optionally) official weapon defindexes.
-4) Restart the server.
+## Features
 
-## Config
+- **Custom weapon override**: play a custom soundevent when a player fires a store-equipped subclass
+- **Official weapon fallback**: map normal weapons by `item_def_index` to duplicated soundevents
+- **Silencer aware**: optional `target_event_unsilenced` for M4A1-S / USP-S
+- **Low overhead**: constant-time lookups per fire event
+
+## Requirements
+
+- [CounterStrikeSharp](https://github.com/roflmuffin/CounterStrikeSharp)
+- [Store API](https://github.com/schwarper/cs2-store) (required for custom weapon mapping)
+- [Resource Precacher](https://github.com/Exkludera/CS2-ResourcePrecacher) (required when using custom .vsndevts names)
+
+## Installation
+
+1. Download the latest release
+2. Extract to `game/csgo/addons/counterstrikesharp/plugins/EmitSoundEditor`
+3. Restart the server or load the plugin
+
+## Configuration
+
+Create `EmitSoundEditor.json`:
 
 ```json
 {
@@ -27,26 +50,167 @@ Overrides weapon fire sounds using Store API equipment state and per-weapon conf
   "official_overrides": [
     {
       "item_def_index": 7,
-      "target_event": "hlym.Weapon_AK47.Single"
+      "target_event": "dup.Weapon_AK47.Single"
     },
     {
       "item_def_index": 60,
-      "target_event": "hlym.Weapon_M4A1.Silenced",
-      "target_event_unsilenced": "hlym.Weapon_M4A4.Single"
+      "target_event": "dup.Weapon_M4A1.Silenced",
+      "target_event_unsilenced": "dup.Weapon_M4A4.Single"
     }
   ],
   "force_mute_all_firebullets": false
 }
 ```
 
-- `subclass`: the subclass from store config (right side of `weapon_base:subclass`).
-- `target_event`: soundevent to play when the weapon fires.
-- `target_event_unsilenced`: optional; used when a silencer-capable weapon fires unsilenced.
-- `official_overrides`: optional fallback by weapon `item_def_index`.
-- `force_mute_all_firebullets`: optional global mute for native firebullet sounds.
+### Fields
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `overrides` | array | Custom weapon subclass overrides. |
+| `overrides[].subclass` | string | Right side of `weapon_base:subclass`. |
+| `overrides[].target_event` | string | Soundevent to play on fire. |
+| `overrides[].target_event_unsilenced` | string | Optional; used when the silencer is off. |
+| `official_overrides` | array | Fallback mapping by `item_def_index` to duplicated soundevents (example prefix: `dup.`). |
+| `official_overrides[].item_def_index` | number | Official weapon item definition index. |
+| `official_overrides[].target_event` | string | Duplicated soundevent to play on fire. |
+| `official_overrides[].target_event_unsilenced` | string | Optional; used when the silencer is off. |
+| `force_mute_all_firebullets` | boolean | Optional global mute for native firebullet sounds. |
+
+## Workflow Overview
+
+1. Author your soundevents (use any naming scheme you like)
+2. Compile sounds and `.vsndevts`
+3. Package to VPK / Workshop and distribute to clients
+4. Configure `EmitSoundEditor.json`
+
+Full step-by-step guide: https://github.com/DearCrazyLeaf/EmitSoundEditor/wiki
+Chinese wiki: https://github.com/DearCrazyLeaf/EmitSoundEditor/blob/main/WIKI_ZH.md
+
+
+## Custom vsndevts naming
+
+If you use a custom .vsndevts filename (instead of soundevents_addon.vsndevts), the file will not be auto-registered. In that case you must precache the custom .vsndevts via Resource Precacher, otherwise events may not play.
 
 ## Notes
 
-- Requires Store API capability to be loaded.
-- The plugin caches equipment per player and uses constant-time lookups on fire.
-- See `WIKI.md` for full authoring, packaging, and deployment steps.
+- `target_event_unsilenced` only applies to silencer-capable weapons (M4A1-S / USP-S)
+- If a custom subclass is equipped, it takes priority over `official_overrides`
+
+## License
+
+<a href="https://www.gnu.org/licenses/gpl-3.0.txt" target="_blank" style="margin-left: 10px; text-decoration: none;">
+    <img src="https://img.shields.io/badge/License-GPL%203.0-orange?style=for-the-badge&logo=gnu" alt="GPL v3 License">
+</a>
+
+---
+
+# 中文版介绍
+
+[![Release](https://img.shields.io/github/v/release/DearCrazyLeaf/EmitSoundEditor?include_prereleases&color=blueviolet)](https://github.com/DearCrazyLeaf/EmitSoundEditor/releases/latest)
+[![License](https://img.shields.io/badge/License-GPL%203.0-orange)](https://www.gnu.org/licenses/gpl-3.0.txt)
+[![Issues](https://img.shields.io/github/issues/DearCrazyLeaf/EmitSoundEditor?color=darkgreen)](https://github.com/DearCrazyLeaf/EmitSoundEditor/issues)
+[![Pull Requests](https://img.shields.io/github/issues-pr/DearCrazyLeaf/EmitSoundEditor?color=blue)](https://github.com/DearCrazyLeaf/EmitSoundEditor/pulls)
+[![Downloads](https://img.shields.io/github/downloads/DearCrazyLeaf/EmitSoundEditor/total?color=brightgreen)](https://github.com/DearCrazyLeaf/EmitSoundEditor/releases)
+[![GitHub Stars](https://img.shields.io/github/stars/DearCrazyLeaf/EmitSoundEditor?color=yellow)](https://github.com/DearCrazyLeaf/EmitSoundEditor/stargazers)
+[![Wiki](https://img.shields.io/badge/Wiki-Documentation-4C8BF5)](https://github.com/DearCrazyLeaf/EmitSoundEditor/wiki)
+
+**一个用于 CS2 服务器的枪声替换插件，可根据商店自定义武器或官方武器类型播放指定音效事件**
+
+## 功能
+
+- **自定义武器替换**：根据商店装备的 subclass 播放指定音效
+- **官方武器回退**：按 `item_def_index` 映射官方武器事件副本
+- **消音器识别**：支持 `target_event_unsilenced` 分支
+- **性能友好**：开火事件使用常量时间查找
+
+## 依赖
+
+- [CounterStrikeSharp](https://github.com/roflmuffin/CounterStrikeSharp)
+- [Store API](https://github.com/schwarper/cs2-store)（自定义武器映射所需）
+- [Resource Precacher](https://github.com/Exkludera/CS2-ResourcePrecacher)（当使用自定义 .vsndevts 名称时必需）
+
+## 安装
+
+1. 下载最新版本
+2. 解压到 `game/csgo/addons/counterstrikesharp/plugins/EmitSoundEditor`
+3. 重启服务器或加载插件
+
+## 配置说明
+
+配置文件示例：
+
+```json
+{
+  "overrides": [
+    {
+      "subclass": "weapon_ak47+13",
+      "target_event": "weapon.example.fire"
+    },
+    {
+      "subclass": "weapon_m4a1_silencer+25",
+      "target_event": "weapon.example.fire_silenced",
+      "target_event_unsilenced": "weapon.example.fire"
+    }
+  ],
+  "official_overrides": [
+    {
+      "item_def_index": 7,
+      "target_event": "dup.Weapon_AK47.Single"
+    },
+    {
+      "item_def_index": 60,
+      "target_event": "dup.Weapon_M4A1.Silenced",
+      "target_event_unsilenced": "dup.Weapon_M4A4.Single"
+    }
+  ],
+  "force_mute_all_firebullets": false
+}
+```
+
+### 字段说明
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `overrides` | array | 自定义武器替换列表。 |
+| `overrides[].subclass` | string | `weapon_base:subclass` 的右侧部分。 |
+| `overrides[].target_event` | string | 开火时播放的音效事件。 |
+| `overrides[].target_event_unsilenced` | string | 可选，不消音时使用。 |
+| `official_overrides` | array | 官方武器事件副本映射（建议使用 `dup.` 之类的前缀）。 |
+| `official_overrides[].item_def_index` | number | 官方武器定义索引。 |
+| `official_overrides[].target_event` | string | 对应的副本音效事件。 |
+| `official_overrides[].target_event_unsilenced` | string | 可选，不消音时使用。 |
+| `force_mute_all_firebullets` | boolean | 可选，全局静音原始开火音效。 |
+
+## 使用流程概要
+
+1. 编写音效事件文件
+2. 编译 sounds 与 `.vsndevts`
+3. 打包并分发资源
+4. 配置 `EmitSoundEditor.json`
+
+完整流程请查看 Wiki：
+https://github.com/DearCrazyLeaf/EmitSoundEditor/wiki
+中文 Wiki：
+https://github.com/DearCrazyLeaf/EmitSoundEditor/blob/main/WIKI_ZH.md
+
+## 自定义 vsndevts 文件名
+
+如果使用自定义的 .vsndevts 文件名（不是 soundevents_addon.vsndevts），引擎不会自动注册该文件，需要通过 Resource Precacher 进行预载，否则事件可能无法播放。
+
+## 许可协议
+
+<a href="https://www.gnu.org/licenses/gpl-3.0.txt" target="_blank" style="margin-left: 10px; text-decoration: none;">
+    <img src="https://img.shields.io/badge/License-GPL%203.0-orange?style=for-the-badge&logo=gnu" alt="GPL v3 License">
+</a>
+
+
+
+
+
+
+
+
+
+
+
+

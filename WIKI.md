@@ -1,4 +1,6 @@
-# EmitSoundEditor Wiki
+﻿# EmitSoundEditor Wiki
+
+Chinese version: https://github.com/DearCrazyLeaf/EmitSoundEditor/blob/main/WIKI_ZH.md
 
 This document describes the end-to-end flow: author soundevents, compile assets, package, and configure the plugin.
 
@@ -78,7 +80,7 @@ If you want to compile all assets under the addon folder, you can run the compil
 
 ## 6) Configure the plugin
 
-Create `EmitSoundEditor.json` next to the plugin DLL:
+`EmitSoundEditor.json`:
 
 ```json
 {
@@ -96,12 +98,22 @@ Create `EmitSoundEditor.json` next to the plugin DLL:
   "official_overrides": [
     {
       "item_def_index": 7,
-      "target_event": "hlym.Weapon_AK47.Single"
+      "target_event": "dup.Weapon_AK47.Single"
     }
   ],
   "force_mute_all_firebullets": false
 }
 ```
+
+Notes:
+- `official_overrides` should point to duplicated soundevents (example prefix: `dup.`).
+
+
+## Custom vsndevts filenames
+
+If you do not use `soundevents_addon.vsndevts`, the engine will not auto-register your soundevents file. You must precache the custom `.vsndevts` via Resource Precacher, otherwise events may not play.
+
+Recommended: use a custom filename to avoid map conflicts, and always precache it.
 
 ## 7) Validation checklist
 
@@ -114,3 +126,4 @@ Create `EmitSoundEditor.json` next to the plugin DLL:
 - If no sound plays, confirm the event name exists in your `.vsndevts` file.
 - If the compiler reports KV3 errors, ensure the header is correct and the file has a single root object.
 - If events play in console but not in-game, confirm the addon is mounted and the paths match.
+
