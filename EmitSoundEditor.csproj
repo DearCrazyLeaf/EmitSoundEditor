@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net8.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+        <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
+        <AssemblyName>EmitSoundEditor</AssemblyName>
+        <RootNamespace>EmitSoundEditor</RootNamespace>
+        <!-- Emit directly into CounterStrikeSharp layout for easier packaging -->
+        <OutputPath>bin\$(Configuration)\$(TargetFramework)\counterstrikesharp\plugins\EmitSoundEditor\</OutputPath>
+        <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="CounterStrikeSharp.API" Version="*" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\..\cs2-store\StoreApi\StoreApi.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <Compile Remove="backup\**\*.cs" />
+    </ItemGroup>
+
+</Project>

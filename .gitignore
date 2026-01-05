@@ -1,0 +1,10 @@
+# Build output
+.vs/
+bin/
+obj/
+
+# Local backups
+backup/
+
+# Local config (server-specific)
+EmitSoundEditor.json
