@@ -130,12 +130,15 @@ Store config example:
 3. Package to VPK / Workshop and distribute to clients
 4. Configure `EmitSoundEditor.json`
 
-**Full Guide**:
+## Required mute + duplicate soundevents
 
-- [Full step-by-step guide](https://github.com/DearCrazyLeaf/EmitSoundEditor/blob/main/SUPPORT.md)
+AG2 ignores subclass fire-sound changes in `weapons.vdata`, so you must mute the original fire events and replay sounds via the plugin.
 
-- [Chinese Version](./SUPPORT.md#zh)
+- `mute_sounds.vsndevts`: contains the **official parent fire events** (e.g., `Weapon_AK47.Single`, silenced variants) but with `volume = 0`. These are referenced by `weapons.vdata`, so muting them prevents double sound.
+- `dup_sounds.vsndevts`: exact copies of those events, but **with new names** (example prefix: `dup.`) and normal volume. The plugin uses these for non-custom weapons so default guns still sound normal.
+- your custom file (example: `custom_sounds.vsndevts`): contains your custom fire events.
 
+If you only mute without duplicates, all default weapons become silent. All three files must be compiled and packaged together, and their event names must match your plugin config.
 
 ## Custom vsndevts naming
 
@@ -147,6 +150,10 @@ Store config example:
 
 - `target_event_unsilenced` only applies to silencer-capable weapons (M4A1-S / USP-S)
 - If a custom subclass is equipped, it takes priority over `official_overrides`
+
+**Full Guide**:
+- [Full step-by-step guide](https://github.com/DearCrazyLeaf/EmitSoundEditor/blob/main/SUPPORT.md)
+- [Chinese Version](./SUPPORT.md#zh)
 
 ## License
 
@@ -273,11 +280,15 @@ Store config example:
 3. 打包并分发资源
 4. 配置 `EmitSoundEditor.json`
 
-**详情见**：
+## 必需的静音与副本音效事件
 
-- [完整流程](https://github.com/DearCrazyLeaf/EmitSoundEditor/blob/main/SUPPORT.md)
+AG2 下 `weapons.vdata` 的 subclass 开火音效不会生效，因此必须先静音原始事件，再由插件播放
 
-- [中文版本](./SUPPORT.md#zh)
+- `mute_sounds.vsndevts`：写入**父级官方开火事件**（例如 `Weapon_AK47.Single` 及消音变体），但把 `volume = 0`。这些事件被 `weapons.vdata` 引用，静音可避免原声叠加
+- `dup_sounds.vsndevts`：上述事件的**副本**，名称改成新前缀（示例：`dup.`），音量正常。插件用它来给**非自定义武器**播放默认音效
+- 自定义音效文件（如 `custom_sounds.vsndevts`）：放你的自定义开火事件
+
+只静音而不做副本，会导致所有默认武器无声。三份文件必须一起编译与打包，事件名称必须与插件配置保持一致
 
 ## 自定义 vsndevts 文件名
 
@@ -289,6 +300,10 @@ Store config example:
 
 - `target_event_unsilenced` 仅适用于可装消音器的武器（M4A1-S / USP-S）
 - 若装备了自定义 subclass，将优先生效，覆盖 `official_overrides`
+
+**详情见**：
+- [完整流程](https://github.com/DearCrazyLeaf/EmitSoundEditor/blob/main/SUPPORT.md)
+- [中文版本](./SUPPORT.md#zh)
 
 
 ## 许可协议
