@@ -8,7 +8,7 @@
 ---
 
 # EmitSoundEditor
-[![Guide](https://img.shields.io/badge/Full%20step--by--step%20guide-Guide-blue?style=for-the-badge)](https://github.com/DearCrazyLeaf/EmitSoundEditor/support)
+[![Guide](https://img.shields.io/badge/Full%20step--by--step%20guide-Guide-blue?style=for-the-badge)](https://github.com/DearCrazyLeaf/EmitSoundEditor/blob/main/SUPPORT.md)
 
 [![中文版介绍](https://img.shields.io/badge/跳转到中文版-中文介绍-red)](#中文版介绍)
 [![Release](https://img.shields.io/github/v/release/DearCrazyLeaf/EmitSoundEditor?include_prereleases&color=blueviolet)](https://github.com/DearCrazyLeaf/EmitSoundEditor/releases/latest)
@@ -126,6 +126,7 @@ Store config example:
 4. Configure `EmitSoundEditor.json`
 
 **Full Guide**:
+
 [Full step-by-step guide](https://github.com/DearCrazyLeaf/EmitSoundEditor/support)
 
 [Chinese Version](./SUPPORT.md#zh)
@@ -268,6 +269,7 @@ Store config example:
 4. 配置 `EmitSoundEditor.json`
 
 **详情见**：
+
 [完整流程](https://github.com/DearCrazyLeaf/EmitSoundEditor/support)
 
 [中文版本](./SUPPORT.md#zh)
