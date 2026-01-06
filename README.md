@@ -76,6 +76,39 @@ Create `EmitSoundEditor.json`:
 | `official_overrides[].target_event_unsilenced` | string | Optional; used when the silencer is off. |
 | `force_mute_all_firebullets` | boolean | Optional global mute for native firebullet sounds. |
 
+
+## Store + subclass setup (AG2 custom weapons)
+
+Short version (see Wiki for the full guide):
+- Store uses `base:subclass` in the `weapon` field (e.g., `weapon_knife:weapon_knife_karambit+1550`).
+- `weapons.vdata` defines the **subclass only** (e.g., `weapon_knife_karambit+1550`).
+- `EmitSoundEditor.json` uses **subclass only** in `overrides[].subclass`.
+
+How it works:
+- On equip or entity creation, the Store plugin parses `base:subclass` and calls `ChangeSubclass` when the active base matches.
+- Inspect temporarily swaps the active weapon?s subclass and then resets it.
+- Only one skin is equipped per weapon base to avoid conflicts.
+
+Store config example:
+
+```json
+"Custom Weapon": {
+  "karambit": {
+    "karambit_custom": {
+      "uniqueid": "karambitcustom",
+      "type": "customweapon",
+      "weapon": "weapon_knife:weapon_knife_karambit+1550",
+      "price": "1000",
+      "slot": "1"
+    }
+  }
+}
+```
+
+Vdata note:
+- Add a subclass entry like `weapon_knife_karambit+1550` and point `m_szModel_AG2` to your model.
+- Ensure the `.vmdl_c` exists under your addon path (uploaded/compiled).
+
 ## Workflow Overview
 
 1. Author your soundevents (use any naming scheme you like)
@@ -181,6 +214,37 @@ If you use a custom .vsndevts filename (instead of soundevents_addon.vsndevts), 
 | `official_overrides[].target_event_unsilenced` | string | 可选，不消音时使用。 |
 | `force_mute_all_firebullets` | boolean | 可选，全局静音原始开火音效。 |
 
+## 商店与子类配置（AG2）
+
+简版说明（完整内容见 Wiki）：
+- 商店 `weapon` 使用 `base:subclass`（例如 `weapon_knife:weapon_knife_karambit+1550`）。
+- `weapons.vdata` 只定义 **subclass**（例如 `weapon_knife_karambit+1550`）。
+- `EmitSoundEditor.json` 的 `overrides[].subclass` 也只填 **subclass**。
+
+工作流程：
+- 装备或实体创建时，商店插件解析 `base:subclass`，当武器 base 匹配时调用 `ChangeSubclass`。
+- 检视会临时切换当前武器的 subclass，之后恢复。
+- 同一 base 只允许装备一个皮肤，避免冲突。
+
+商店配置示例：
+
+```json
+"Custom Weapon": {
+  "karambit": {
+    "karambit_custom": {
+      "uniqueid": "karambitcustom",
+      "type": "customweapon",
+      "weapon": "weapon_knife:weapon_knife_karambit+1550",
+      "price": "1000",
+      "slot": "1"
+    }
+  }
+}
+```
+
+Vdata 说明：
+- 添加 subclass 条目，例如 `weapon_knife_karambit+1550`，并将 `m_szModel_AG2` 指向你的模型路径。
+- 确保 `.vmdl_c` 已在 addon 路径中（已上传/编译）。
 ## 使用流程概要
 
 1. 编写音效事件文件
@@ -202,6 +266,7 @@ https://github.com/DearCrazyLeaf/EmitSoundEditor/blob/main/WIKI_ZH.md
 <a href="https://www.gnu.org/licenses/gpl-3.0.txt" target="_blank" style="margin-left: 10px; text-decoration: none;">
     <img src="https://img.shields.io/badge/License-GPL%203.0-orange?style=for-the-badge&logo=gnu" alt="GPL v3 License">
 </a>
+
 
 
 
