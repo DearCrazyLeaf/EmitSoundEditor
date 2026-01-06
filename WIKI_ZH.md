@@ -204,6 +204,7 @@
 ### 参考来源
 方案参考：
 https://github.com/exkludera-cssharp/equipments/issues/5#issuecomment-3603250775
+
 ## 1) 准备音频文件
 
 - 源文件建议使用 `.wav`
@@ -284,7 +285,7 @@ resourcecompiler.exe -game "P:\Steam\steamapps\common\Counter-Strike Global Offe
 
 ## 6) 配置插件
 
-`EmitSoundEditor.json`：
+`.\counterstrikesharp\configs\plugins\EmitSoundEditor\EmitSoundEditor.json`：
 
 ```json
 {

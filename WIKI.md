@@ -289,7 +289,7 @@ If you want to compile all assets under the addon folder, you can run the compil
 
 ## 6) Configure the plugin
 
-`EmitSoundEditor.json`:
+`.\counterstrikesharp\configs\plugins\EmitSoundEditor\EmitSoundEditor.json`:
 
 ```json
 {

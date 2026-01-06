@@ -22,7 +22,7 @@
 
 - [CounterStrikeSharp](https://github.com/roflmuffin/CounterStrikeSharp)
 - [Store API](https://github.com/schwarper/cs2-store) (required for custom weapon mapping)
-- [Resource Precacher](https://github.com/Exkludera/CS2-ResourcePrecacher) (required when using custom .vsndevts names)
+- [Resource Precacher](https://github.com/KillStr3aK/ResourcePrecacher) (required when using custom .vsndevts names)
 
 ## Installation
 
@@ -32,7 +32,7 @@
 
 ## Configuration
 
-Create `EmitSoundEditor.json`:
+`.\counterstrikesharp\configs\plugins\EmitSoundEditor\EmitSoundEditor.json`:
 
 ```json
 {
@@ -117,6 +117,7 @@ Vdata note:
 4. Configure `EmitSoundEditor.json`
 
 Full step-by-step guide: https://github.com/DearCrazyLeaf/EmitSoundEditor/wiki
+
 Chinese wiki: https://github.com/DearCrazyLeaf/EmitSoundEditor/blob/main/WIKI_ZH.md
 
 
@@ -160,7 +161,7 @@ If you use a custom .vsndevts filename (instead of soundevents_addon.vsndevts), 
 
 - [CounterStrikeSharp](https://github.com/roflmuffin/CounterStrikeSharp)
 - [Store API](https://github.com/schwarper/cs2-store)（自定义武器映射所需）
-- [Resource Precacher](https://github.com/Exkludera/CS2-ResourcePrecacher)（当使用自定义 .vsndevts 名称时必需）
+- [Resource Precacher](https://github.com/KillStr3aK/ResourcePrecacher)（当使用自定义 .vsndevts 名称时必需）
 
 ## 安装
 
@@ -170,7 +171,7 @@ If you use a custom .vsndevts filename (instead of soundevents_addon.vsndevts), 
 
 ## 配置说明
 
-配置文件示例：
+`.\counterstrikesharp\configs\plugins\EmitSoundEditor\EmitSoundEditor.json`：
 
 ```json
 {
@@ -254,6 +255,7 @@ Vdata 说明：
 
 完整流程请查看 Wiki：
 https://github.com/DearCrazyLeaf/EmitSoundEditor/wiki
+
 中文 Wiki：
 https://github.com/DearCrazyLeaf/EmitSoundEditor/blob/main/WIKI_ZH.md
 
