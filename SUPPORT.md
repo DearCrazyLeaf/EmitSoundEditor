@@ -4,7 +4,7 @@
 
 # EmitSoundEditor Guide
 
-Chinese version: https://github.com/DearCrazyLeaf/EmitSoundEditor/blob/main/WIKI_ZH.md
+Chinese version: [跳转至中文](https://github.com/DearCrazyLeaf/EmitSoundEditor/blob/main/SUPPORT.md#zh)
 
 This document describes the end-to-end flow: author soundevents, compile assets, package, and configure the plugin.
 
