@@ -7,7 +7,7 @@
 [![Pull Requests](https://img.shields.io/github/issues-pr/DearCrazyLeaf/EmitSoundEditor?color=blue)](https://github.com/DearCrazyLeaf/EmitSoundEditor/pulls)
 [![Downloads](https://img.shields.io/github/downloads/DearCrazyLeaf/EmitSoundEditor/total?color=brightgreen)](https://github.com/DearCrazyLeaf/EmitSoundEditor/releases)
 [![GitHub Stars](https://img.shields.io/github/stars/DearCrazyLeaf/EmitSoundEditor?color=yellow)](https://github.com/DearCrazyLeaf/EmitSoundEditor/stargazers)
-[![Wiki](https://img.shields.io/badge/Wiki-Documentation-4C8BF5)](https://github.com/DearCrazyLeaf/EmitSoundEditor/wiki)
+[![Wiki](https://img.shields.io/badge/Wiki-Documentation-4C8BF5&label=WIKI)](https://github.com/DearCrazyLeaf/EmitSoundEditor/blob/main/WIKI.md)
 
 **A Counter-Strike 2 server plugin that replaces weapon fire sounds based on equipped custom subclasses or official weapon definitions**
 
@@ -32,7 +32,7 @@
 
 ## Configuration
 
-`.\counterstrikesharp\configs\plugins\EmitSoundEditor\EmitSoundEditor.json`:
+Path `.\counterstrikesharp\configs\plugins\EmitSoundEditor\EmitSoundEditor.json`:
 
 ```json
 {
@@ -67,27 +67,27 @@
 | Field | Type | Description |
 | --- | --- | --- |
 | `overrides` | array | Custom weapon subclass overrides. |
-| `overrides[].subclass` | string | Right side of `weapon_base:subclass`. |
-| `overrides[].target_event` | string | Soundevent to play on fire. |
-| `overrides[].target_event_unsilenced` | string | Optional; used when the silencer is off. |
-| `official_overrides` | array | Fallback mapping by `item_def_index` to duplicated soundevents (example prefix: `dup.`). |
-| `official_overrides[].item_def_index` | number | Official weapon item definition index. |
-| `official_overrides[].target_event` | string | Duplicated soundevent to play on fire. |
-| `official_overrides[].target_event_unsilenced` | string | Optional; used when the silencer is off. |
-| `force_mute_all_firebullets` | boolean | Optional global mute for native firebullet sounds. |
+| `overrides[].subclass` | string | Right side of `weapon_base:subclass` |
+| `overrides[].target_event` | string | Soundevent to play on fire |
+| `overrides[].target_event_unsilenced` | string | Optional; used when the silencer is off |
+| `official_overrides` | array | Fallback mapping by `item_def_index` to duplicated soundevents (example prefix: `dup.`) |
+| `official_overrides[].item_def_index` | number | Official weapon item definition index |
+| `official_overrides[].target_event` | string | Duplicated soundevent to play on fire |
+| `official_overrides[].target_event_unsilenced` | string | Optional; used when the silencer is off |
+| `force_mute_all_firebullets` | boolean | Optional global mute for native firebullet sounds |
 
 
 ## Store + subclass setup (AG2 custom weapons)
 
-Short version (see Wiki for the full guide):
-- Store uses `base:subclass` in the `weapon` field (e.g., `weapon_knife:weapon_knife_karambit+1550`).
-- `weapons.vdata` defines the **subclass only** (e.g., `weapon_knife_karambit+1550`).
-- `EmitSoundEditor.json` uses **subclass only** in `overrides[].subclass`.
+**Short version (see Wiki for the full guide)**:
+- Store uses `base:subclass` in the `weapon` field (e.g., `weapon_knife:weapon_knife_karambit+1550`)
+- `weapons.vdata` defines the **subclass only** (e.g., `weapon_knife_karambit+1550`)
+- `EmitSoundEditor.json` uses **subclass only** in `overrides[].subclass`
 
-How it works:
-- On equip or entity creation, the Store plugin parses `base:subclass` and calls `ChangeSubclass` when the active base matches.
-- Inspect temporarily swaps the active weapon?s subclass and then resets it.
-- Only one skin is equipped per weapon base to avoid conflicts.
+**How it works**:
+- On equip or entity creation, the Store plugin parses `base:subclass` and calls `ChangeSubclass` when the active base matches
+- Inspect temporarily swaps the active weapon's subclass and then resets it
+- Only one skin is equipped per weapon base to avoid conflicts
 
 Store config example:
 
@@ -104,10 +104,10 @@ Store config example:
   }
 }
 ```
-
-Vdata note:
-- Add a subclass entry like `weapon_knife_karambit+1550` and point `m_szModel_AG2` to your model.
-- Ensure the `.vmdl_c` exists under your addon path (uploaded/compiled).
+> [!NOTE]
+> ### Vdata note:
+> - Add a subclass entry like `weapon_knife_karambit+1550` and point `m_szModel_AG2` to your model
+> - Ensure the `.vmdl_c` exists under your addon path (uploaded/compiled)
 
 ## Workflow Overview
 
@@ -116,14 +116,15 @@ Vdata note:
 3. Package to VPK / Workshop and distribute to clients
 4. Configure `EmitSoundEditor.json`
 
-Full step-by-step guide: https://github.com/DearCrazyLeaf/EmitSoundEditor/wiki
-
-Chinese wiki: https://github.com/DearCrazyLeaf/EmitSoundEditor/blob/main/WIKI_ZH.md
+[Full step-by-step guide](https://github.com/DearCrazyLeaf/EmitSoundEditor/wiki)
+[Chinese Version](https://github.com/DearCrazyLeaf/EmitSoundEditor/blob/main/WIKI_ZH.md)
 
 
 ## Custom vsndevts naming
 
-If you use a custom .vsndevts filename (instead of soundevents_addon.vsndevts), the file will not be auto-registered. In that case you must precache the custom .vsndevts via Resource Precacher, otherwise events may not play.
+- If you do not use `soundevents_addon.vsndevts`, the engine will not auto-register your soundevents file. You must precache the custom `.vsndevts` via Resource Precacher, otherwise events may not play.
+
+**Recommended**: use a custom filename to avoid map conflicts, and always precache it
 
 ## Notes
 
@@ -140,13 +141,14 @@ If you use a custom .vsndevts filename (instead of soundevents_addon.vsndevts), 
 
 # 中文版介绍
 
-[![Release](https://img.shields.io/github/v/release/DearCrazyLeaf/EmitSoundEditor?include_prereleases&color=blueviolet)](https://github.com/DearCrazyLeaf/EmitSoundEditor/releases/latest)
-[![License](https://img.shields.io/badge/License-GPL%203.0-orange)](https://www.gnu.org/licenses/gpl-3.0.txt)
-[![Issues](https://img.shields.io/github/issues/DearCrazyLeaf/EmitSoundEditor?color=darkgreen)](https://github.com/DearCrazyLeaf/EmitSoundEditor/issues)
-[![Pull Requests](https://img.shields.io/github/issues-pr/DearCrazyLeaf/EmitSoundEditor?color=blue)](https://github.com/DearCrazyLeaf/EmitSoundEditor/pulls)
-[![Downloads](https://img.shields.io/github/downloads/DearCrazyLeaf/EmitSoundEditor/total?color=brightgreen)](https://github.com/DearCrazyLeaf/EmitSoundEditor/releases)
-[![GitHub Stars](https://img.shields.io/github/stars/DearCrazyLeaf/EmitSoundEditor?color=yellow)](https://github.com/DearCrazyLeaf/EmitSoundEditor/stargazers)
-[![Wiki](https://img.shields.io/badge/Wiki-Documentation-4C8BF5)](https://github.com/DearCrazyLeaf/EmitSoundEditor/wiki)
+[![English](https://img.shields.io/badge/Back%20to%20English-English-red)](#EmitSoundEditor)
+[![Release](https://img.shields.io/github/v/release/DearCrazyLeaf/EmitSoundEditor?include_prereleases&color=blueviolet&label=最新版本)](https://github.com/DearCrazyLeaf/EmitSoundEditor/releases/latest)
+[![License](https://img.shields.io/badge/许可证-GPL%203.0-orange)](https://www.gnu.org/licenses/gpl-3.0.txt)
+[![Issues](https://img.shields.io/github/issues/DearCrazyLeaf/EmitSoundEditor?color=darkgreen&label=反馈)](https://github.com/DearCrazyLeaf/EmitSoundEditor/issues)
+[![Pull Requests](https://img.shields.io/github/issues-pr/DearCrazyLeaf/EmitSoundEditor?color=blue&label=请求)](https://github.com/DearCrazyLeaf/EmitSoundEditor/pulls)
+[![Downloads](https://img.shields.io/github/downloads/DearCrazyLeaf/EmitSoundEditor/total?color=brightgreen&label=下载)](https://github.com/DearCrazyLeaf/EmitSoundEditor/releases)
+[![GitHub Stars](https://img.shields.io/github/stars/DearCrazyLeaf/EmitSoundEditor?color=yellow&label=标星)](https://github.com/DearCrazyLeaf/EmitSoundEditor/stargazers)
+[![Wiki](https://img.shields.io/badge/Wiki-Documentation-4C8BF5&label=WIKI)](https://github.com/DearCrazyLeaf/EmitSoundEditor/blob/main/WIKI_ZH.md)
 
 **一个用于 CS2 服务器的枪声替换插件，可根据商店自定义武器或官方武器类型播放指定音效事件**
 
@@ -205,27 +207,27 @@ If you use a custom .vsndevts filename (instead of soundevents_addon.vsndevts), 
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
-| `overrides` | array | 自定义武器替换列表。 |
-| `overrides[].subclass` | string | `weapon_base:subclass` 的右侧部分。 |
-| `overrides[].target_event` | string | 开火时播放的音效事件。 |
+| `overrides` | array | 自定义武器替换列表 |
+| `overrides[].subclass` | string | `weapon_base:subclass` 的右侧部分 |
+| `overrides[].target_event` | string | 开火时播放的音效事件 |
 | `overrides[].target_event_unsilenced` | string | 可选，不消音时使用。 |
-| `official_overrides` | array | 官方武器事件副本映射（建议使用 `dup.` 之类的前缀）。 |
-| `official_overrides[].item_def_index` | number | 官方武器定义索引。 |
-| `official_overrides[].target_event` | string | 对应的副本音效事件。 |
-| `official_overrides[].target_event_unsilenced` | string | 可选，不消音时使用。 |
-| `force_mute_all_firebullets` | boolean | 可选，全局静音原始开火音效。 |
+| `official_overrides` | array | 官方武器事件副本映射（建议使用 `dup.` 之类的前缀） |
+| `official_overrides[].item_def_index` | number | 官方武器定义索引 |
+| `official_overrides[].target_event` | string | 对应的副本音效事件 |
+| `official_overrides[].target_event_unsilenced` | string | 可选，不消音时使用 |
+| `force_mute_all_firebullets` | boolean | 可选，全局静音原始开火音效 |
 
 ## 商店与子类配置（AG2）
 
-简版说明（完整内容见 Wiki）：
-- 商店 `weapon` 使用 `base:subclass`（例如 `weapon_knife:weapon_knife_karambit+1550`）。
-- `weapons.vdata` 只定义 **subclass**（例如 `weapon_knife_karambit+1550`）。
-- `EmitSoundEditor.json` 的 `overrides[].subclass` 也只填 **subclass**。
+**简版说明（完整内容见 Wiki）**：
+- 商店 `weapon` 使用 `base:subclass`（例如 `weapon_knife:weapon_knife_karambit+1550`）
+- `weapons.vdata` 只定义 **subclass**（例如 `weapon_knife_karambit+1550`）
+- `EmitSoundEditor.json` 的 `overrides[].subclass` 也只填 **subclass**
 
-工作流程：
-- 装备或实体创建时，商店插件解析 `base:subclass`，当武器 base 匹配时调用 `ChangeSubclass`。
-- 检视会临时切换当前武器的 subclass，之后恢复。
-- 同一 base 只允许装备一个皮肤，避免冲突。
+**工作流程**：
+- 装备或实体创建时，商店插件解析 `base:subclass`，当武器 base 匹配时调用 `ChangeSubclass`
+- 检视会临时切换当前武器的 subclass，之后恢复
+- 同一 base 只允许装备一个皮肤，避免冲突
 
 商店配置示例：
 
@@ -242,10 +244,11 @@ If you use a custom .vsndevts filename (instead of soundevents_addon.vsndevts), 
   }
 }
 ```
+> [!NOTE]
+> ### Vdata 说明：
+> - 添加 subclass 条目，例如 `weapon_knife_karambit+1550`，并将 `m_szModel_AG2` 指向你的模型路径
+> - 确保 `.vmdl_c` 已在 addon 路径中（已上传/编译）
 
-Vdata 说明：
-- 添加 subclass 条目，例如 `weapon_knife_karambit+1550`，并将 `m_szModel_AG2` 指向你的模型路径。
-- 确保 `.vmdl_c` 已在 addon 路径中（已上传/编译）。
 ## 使用流程概要
 
 1. 编写音效事件文件
@@ -253,15 +256,20 @@ Vdata 说明：
 3. 打包并分发资源
 4. 配置 `EmitSoundEditor.json`
 
-完整流程请查看 Wiki：
-https://github.com/DearCrazyLeaf/EmitSoundEditor/wiki
-
-中文 Wiki：
-https://github.com/DearCrazyLeaf/EmitSoundEditor/blob/main/WIKI_ZH.md
+[完整流程Wiki](https://github.com/DearCrazyLeaf/EmitSoundEditor/wiki)
+[中文版本](https://github.com/DearCrazyLeaf/EmitSoundEditor/blob/main/WIKI_ZH.md)
 
 ## 自定义 vsndevts 文件名
 
-如果使用自定义的 .vsndevts 文件名（不是 soundevents_addon.vsndevts），引擎不会自动注册该文件，需要通过 Resource Precacher 进行预载，否则事件可能无法播放。
+- 如果不使用 `soundevents_addon.vsndevts`，引擎不会自动注册你的 soundevents 文件，此时必须通过 Resource Precacher 预载该自定义 `.vsndevts`，否则事件可能无法播放
+
+**建议使用自定义文件名以避免与地图冲突，并务必进行预载**
+
+## 注意事项
+
+- `target_event_unsilenced` 仅适用于可装消音器的武器（M4A1-S / USP-S）
+- 若装备了自定义 subclass，将优先生效，覆盖 `official_overrides`
+
 
 ## 许可协议
 
