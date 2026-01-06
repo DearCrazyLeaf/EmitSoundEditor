@@ -8,6 +8,7 @@
 ---
 
 # EmitSoundEditor
+[![Guide](https://img.shields.io/badge/Full%20step--by--step%20guide-Guide-blue?style=for-the-badge)](https://github.com/DearCrazyLeaf/EmitSoundEditor/support)
 
 [![中文版介绍](https://img.shields.io/badge/跳转到中文版-中文介绍-red)](#中文版介绍)
 [![Release](https://img.shields.io/github/v/release/DearCrazyLeaf/EmitSoundEditor?include_prereleases&color=blueviolet)](https://github.com/DearCrazyLeaf/EmitSoundEditor/releases/latest)
@@ -16,7 +17,6 @@
 [![Pull Requests](https://img.shields.io/github/issues-pr/DearCrazyLeaf/EmitSoundEditor?color=blue)](https://github.com/DearCrazyLeaf/EmitSoundEditor/pulls)
 [![Downloads](https://img.shields.io/github/downloads/DearCrazyLeaf/EmitSoundEditor/total?color=brightgreen)](https://github.com/DearCrazyLeaf/EmitSoundEditor/releases)
 [![GitHub Stars](https://img.shields.io/github/stars/DearCrazyLeaf/EmitSoundEditor?color=yellow)](https://github.com/DearCrazyLeaf/EmitSoundEditor/stargazers)
-[![Wiki](https://img.shields.io/badge/Wiki-Documentation-4C8BF5&label=WIKI)](https://github.com/DearCrazyLeaf/EmitSoundEditor/blob/main/WIKI.md)
 
 **A Counter-Strike 2 server plugin that replaces weapon fire sounds based on equipped custom subclasses or official weapon definitions**
 
@@ -125,8 +125,10 @@ Store config example:
 3. Package to VPK / Workshop and distribute to clients
 4. Configure `EmitSoundEditor.json`
 
-[Full step-by-step guide](https://github.com/DearCrazyLeaf/EmitSoundEditor/wiki)
-[Chinese Version](https://github.com/DearCrazyLeaf/EmitSoundEditor/blob/main/WIKI_ZH.md)
+**Full Guide**:
+[Full step-by-step guide](https://github.com/DearCrazyLeaf/EmitSoundEditor/support)
+
+[Chinese Version](./SUPPORT.md#zh)
 
 
 ## Custom vsndevts naming
@@ -149,6 +151,7 @@ Store config example:
 ---
 
 # 中文版介绍
+[![Guide](https://img.shields.io/badge/Chinese%20Version-中文指南-blue?style=for-the-badge)](./SUPPORT.md#zh)
 
 [![English](https://img.shields.io/badge/Back%20to%20English-English-red)](#EmitSoundEditor)
 [![Release](https://img.shields.io/github/v/release/DearCrazyLeaf/EmitSoundEditor?include_prereleases&color=blueviolet&label=最新版本)](https://github.com/DearCrazyLeaf/EmitSoundEditor/releases/latest)
@@ -157,7 +160,6 @@ Store config example:
 [![Pull Requests](https://img.shields.io/github/issues-pr/DearCrazyLeaf/EmitSoundEditor?color=blue&label=请求)](https://github.com/DearCrazyLeaf/EmitSoundEditor/pulls)
 [![Downloads](https://img.shields.io/github/downloads/DearCrazyLeaf/EmitSoundEditor/total?color=brightgreen&label=下载)](https://github.com/DearCrazyLeaf/EmitSoundEditor/releases)
 [![GitHub Stars](https://img.shields.io/github/stars/DearCrazyLeaf/EmitSoundEditor?color=yellow&label=标星)](https://github.com/DearCrazyLeaf/EmitSoundEditor/stargazers)
-[![Wiki](https://img.shields.io/badge/Wiki-Documentation-4C8BF5&label=WIKI)](https://github.com/DearCrazyLeaf/EmitSoundEditor/blob/main/WIKI_ZH.md)
 
 **一个用于 CS2 服务器的枪声替换插件，可根据商店自定义武器或官方武器类型播放指定音效事件**
 
@@ -182,7 +184,7 @@ Store config example:
 
 ## 配置说明
 
-`.\counterstrikesharp\configs\plugins\EmitSoundEditor\EmitSoundEditor.json`：
+路径 `.\counterstrikesharp\configs\plugins\EmitSoundEditor\EmitSoundEditor.json`：
 
 ```json
 {
@@ -265,8 +267,10 @@ Store config example:
 3. 打包并分发资源
 4. 配置 `EmitSoundEditor.json`
 
-[完整流程Wiki](https://github.com/DearCrazyLeaf/EmitSoundEditor/wiki)
-[中文版本](https://github.com/DearCrazyLeaf/EmitSoundEditor/blob/main/WIKI_ZH.md)
+**详情见**：
+[完整流程](https://github.com/DearCrazyLeaf/EmitSoundEditor/support)
+
+[中文版本](./SUPPORT.md#zh)
 
 ## 自定义 vsndevts 文件名
 
