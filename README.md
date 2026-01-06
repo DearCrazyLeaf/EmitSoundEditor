@@ -1,6 +1,11 @@
-﻿<h3 align="center">
-  <span style="vertical-align: middle; font-weight: 600;">
+﻿<p align="center">
+  <a href="https://github.com/roflmuffin/CounterStrikeSharp">
     <img src="https://docs.cssharp.dev/images/cssharp.svg" width="60" height="60" style="vertical-align: middle; margin-right: 10px;" />
+  </a>
+</p>
+
+<h3 align="center">
+  <span style="vertical-align: middle; font-weight: 600;">
     <code style="vertical-align: middle;">CounterStrikeSharp</code>
   </span>
 </h3>
@@ -127,9 +132,9 @@ Store config example:
 
 **Full Guide**:
 
-[Full step-by-step guide](https://github.com/DearCrazyLeaf/EmitSoundEditor/support)
+- [Full step-by-step guide](https://github.com/DearCrazyLeaf/EmitSoundEditor/blob/main/SUPPORT.md)
 
-[Chinese Version](./SUPPORT.md#zh)
+- [Chinese Version](./SUPPORT.md#zh)
 
 
 ## Custom vsndevts naming
@@ -270,9 +275,9 @@ Store config example:
 
 **详情见**：
 
-[完整流程](https://github.com/DearCrazyLeaf/EmitSoundEditor/support)
+- [完整流程](https://github.com/DearCrazyLeaf/EmitSoundEditor/blob/main/SUPPORT.md)
 
-[中文版本](./SUPPORT.md#zh)
+- [中文版本](./SUPPORT.md#zh)
 
 ## 自定义 vsndevts 文件名
 
