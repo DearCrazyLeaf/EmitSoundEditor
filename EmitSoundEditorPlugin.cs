@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Reflection;
 using CounterStrikeSharp.API;
@@ -152,7 +152,7 @@ public class EmitSoundEditorPlugin : BasePlugin, IPluginConfig<EmitSoundEditorCo
             {
                 _overrideBySubclass.TryGetValue(mappedSubclass, out customOverride);
             }
-            else if (TryGetAlternateBase(weapon.DesignerName, out var alternateBase) &&
+            else if (TryGetAlternateBase(weapon.DesignerName, (int)weapon.AttributeManager.Item.ItemDefinitionIndex, out var alternateBase) &&
                      equippedByBase.TryGetValue(alternateBase, out mappedSubclass))
             {
                 _overrideBySubclass.TryGetValue(mappedSubclass, out customOverride);
@@ -403,16 +403,16 @@ public class EmitSoundEditorPlugin : BasePlugin, IPluginConfig<EmitSoundEditorCo
         return map;
     }
 
-    private static bool TryGetAlternateBase(string designerName, out string alternateBase)
+    private static bool TryGetAlternateBase(string designerName, int itemDefIndex, out string alternateBase)
     {
         alternateBase = string.Empty;
-        if (designerName.Equals("weapon_m4a1", StringComparison.OrdinalIgnoreCase))
+        if (itemDefIndex == 60 && designerName.Equals("weapon_m4a1", StringComparison.OrdinalIgnoreCase))
         {
             alternateBase = "weapon_m4a1_silencer";
             return true;
         }
 
-        if (designerName.Equals("weapon_hkp2000", StringComparison.OrdinalIgnoreCase))
+        if (itemDefIndex == 61 && designerName.Equals("weapon_hkp2000", StringComparison.OrdinalIgnoreCase))
         {
             alternateBase = "weapon_usp_silencer";
             return true;
@@ -591,3 +591,4 @@ public class EmitSoundEditorPlugin : BasePlugin, IPluginConfig<EmitSoundEditorCo
     }
 
 }
+
