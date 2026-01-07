@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Reflection;
 using CounterStrikeSharp.API;
@@ -26,6 +26,7 @@ public class EmitSoundEditorPlugin : BasePlugin, IPluginConfig<EmitSoundEditorCo
     private readonly Dictionary<string, WeaponSoundOverride> _overrideBySubclass = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<int, WeaponItemDefOverride> _overrideByItemDefIndex = new();
     private readonly Dictionary<ulong, Dictionary<string, string>> _playerSubclassByBase = new();
+    private readonly Dictionary<nint, string> _subclassByWeaponHandle = new();
     private readonly HashSet<int> _suppressOriginalSoundSlots = new();
     private readonly HashSet<int> _suppressOriginalSoundEntityIndices = new();
     private bool _pendingInitialRefresh;
@@ -66,6 +67,7 @@ public class EmitSoundEditorPlugin : BasePlugin, IPluginConfig<EmitSoundEditorCo
 
     private void OnMapStart(string mapName)
     {
+        _subclassByWeaponHandle.Clear();
         if (!_pendingInitialRefresh || _storeApi == null)
         {
             return;
@@ -144,22 +146,35 @@ public class EmitSoundEditorPlugin : BasePlugin, IPluginConfig<EmitSoundEditorCo
             return HookResult.Continue;
         }
 
+        var itemDefIndex = (int)weapon.AttributeManager.Item.ItemDefinitionIndex;
         WeaponSoundOverride? customOverride = null;
+        string? mappedSubclass = null;
 
-        if (_playerSubclassByBase.TryGetValue(player.SteamID, out var equippedByBase))
+        if (_subclassByWeaponHandle.TryGetValue(weapon.Handle, out var handleSubclass) &&
+            _overrideBySubclass.TryGetValue(handleSubclass, out customOverride))
         {
-            if (equippedByBase.TryGetValue(weapon.DesignerName, out var mappedSubclass))
+            mappedSubclass = handleSubclass;
+        }
+        else if (_playerSubclassByBase.TryGetValue(player.SteamID, out var equippedByBase))
+        {
+            if (TryGetAlternateBase(weapon.DesignerName, itemDefIndex, out var alternateBase) &&
+                equippedByBase.TryGetValue(alternateBase, out var alternateSubclass))
             {
-                _overrideBySubclass.TryGetValue(mappedSubclass, out customOverride);
+                mappedSubclass = alternateSubclass;
+                _overrideBySubclass.TryGetValue(alternateSubclass, out customOverride);
             }
-            else if (TryGetAlternateBase(weapon.DesignerName, (int)weapon.AttributeManager.Item.ItemDefinitionIndex, out var alternateBase) &&
-                     equippedByBase.TryGetValue(alternateBase, out mappedSubclass))
+            else if (equippedByBase.TryGetValue(weapon.DesignerName, out var baseSubclass))
             {
-                _overrideBySubclass.TryGetValue(mappedSubclass, out customOverride);
+                mappedSubclass = baseSubclass;
+                _overrideBySubclass.TryGetValue(baseSubclass, out customOverride);
             }
         }
 
-        var itemDefIndex = (int)weapon.AttributeManager.Item.ItemDefinitionIndex;
+        if (customOverride != null && mappedSubclass != null)
+        {
+            TrackWeaponSubclass(weapon, mappedSubclass);
+        }
+
         _overrideByItemDefIndex.TryGetValue(itemDefIndex, out var officialOverride);
 
         string? targetEvent = null;
@@ -244,23 +259,36 @@ public class EmitSoundEditorPlugin : BasePlugin, IPluginConfig<EmitSoundEditorCo
 
     private bool ShouldSuppressForPlayer(CCSPlayerController player)
     {
-        if (!_playerSubclassByBase.TryGetValue(player.SteamID, out var equippedByBase))
-        {
-            return false;
-        }
-
         var weapon = player.PlayerPawn?.Value?.WeaponServices?.ActiveWeapon?.Value;
         if (weapon == null || !weapon.IsValid)
         {
             return false;
         }
 
-        if (!equippedByBase.TryGetValue(weapon.DesignerName, out var subclass))
+        var itemDefIndex = (int)weapon.AttributeManager.Item.ItemDefinitionIndex;
+
+        if (_subclassByWeaponHandle.TryGetValue(weapon.Handle, out var handleSubclass))
+        {
+            return _overrideBySubclass.ContainsKey(handleSubclass);
+        }
+
+        if (!_playerSubclassByBase.TryGetValue(player.SteamID, out var equippedByBase))
         {
             return false;
         }
 
-        return _overrideBySubclass.ContainsKey(subclass);
+        if (TryGetAlternateBase(weapon.DesignerName, itemDefIndex, out var alternateBase) &&
+            equippedByBase.TryGetValue(alternateBase, out var alternateSubclass))
+        {
+            return _overrideBySubclass.ContainsKey(alternateSubclass);
+        }
+
+        if (!equippedByBase.TryGetValue(weapon.DesignerName, out var baseSubclass))
+        {
+            return false;
+        }
+
+        return _overrideBySubclass.ContainsKey(baseSubclass);
     }
 
     private void OnPlayerEquipItem(CCSPlayerController player, Dictionary<string, string> item)
@@ -277,6 +305,12 @@ public class EmitSoundEditorPlugin : BasePlugin, IPluginConfig<EmitSoundEditorCo
 
         var map = GetOrCreatePlayerMap(player.SteamID);
         map[weaponBase] = weaponSubclass;
+
+        var weapon = FindWeaponByBase(player, weaponBase);
+        if (weapon != null)
+        {
+            TrackWeaponSubclass(weapon, weaponSubclass);
+        }
     }
 
     private void OnPlayerUnequipItem(CCSPlayerController player, Dictionary<string, string> item)
@@ -300,6 +334,12 @@ public class EmitSoundEditorPlugin : BasePlugin, IPluginConfig<EmitSoundEditorCo
             string.Equals(currentSubclass, weaponSubclass, StringComparison.OrdinalIgnoreCase))
         {
             map.Remove(weaponBase);
+
+            var weapon = FindWeaponByBase(player, weaponBase);
+            if (weapon != null)
+            {
+                UntrackWeaponSubclass(weapon);
+            }
         }
 
         if (map.Count == 0)
@@ -337,6 +377,12 @@ public class EmitSoundEditorPlugin : BasePlugin, IPluginConfig<EmitSoundEditorCo
             }
 
             map[weaponBase] = weaponSubclass;
+
+            var weapon = FindWeaponByBase(player, weaponBase);
+            if (weapon != null)
+            {
+                TrackWeaponSubclass(weapon, weaponSubclass);
+            }
         }
 
         if (map.Count > 0)
@@ -403,6 +449,54 @@ public class EmitSoundEditorPlugin : BasePlugin, IPluginConfig<EmitSoundEditorCo
         return map;
     }
 
+    private static CBasePlayerWeapon? FindWeaponByBase(CCSPlayerController player, string weaponBase)
+    {
+        var weaponServices = player.PlayerPawn?.Value?.WeaponServices;
+        if (weaponServices == null)
+        {
+            return null;
+        }
+
+        var activeWeapon = weaponServices.ActiveWeapon?.Value;
+        if (activeWeapon != null && activeWeapon.IsValid &&
+            string.Equals(activeWeapon.DesignerName, weaponBase, StringComparison.OrdinalIgnoreCase))
+        {
+            return activeWeapon;
+        }
+
+        foreach (var handle in weaponServices.MyWeapons)
+        {
+            var weapon = handle.Value;
+            if (weapon != null && weapon.IsValid &&
+                string.Equals(weapon.DesignerName, weaponBase, StringComparison.OrdinalIgnoreCase))
+            {
+                return weapon;
+            }
+        }
+
+        return null;
+    }
+
+    private void TrackWeaponSubclass(CBasePlayerWeapon weapon, string subclass)
+    {
+        if (weapon == null || !weapon.IsValid || string.IsNullOrWhiteSpace(subclass))
+        {
+            return;
+        }
+
+        _subclassByWeaponHandle[weapon.Handle] = subclass.Trim();
+    }
+
+    private void UntrackWeaponSubclass(CBasePlayerWeapon weapon)
+    {
+        if (weapon == null)
+        {
+            return;
+        }
+
+        _subclassByWeaponHandle.Remove(weapon.Handle);
+    }
+
     private static bool TryGetAlternateBase(string designerName, int itemDefIndex, out string alternateBase)
     {
         alternateBase = string.Empty;
@@ -451,6 +545,54 @@ public class EmitSoundEditorPlugin : BasePlugin, IPluginConfig<EmitSoundEditorCo
 
     private static bool IsSilenced(EventWeaponFire @event, CBasePlayerWeapon weapon)
     {
+        var itemDefIndex = (int)weapon.AttributeManager.Item.ItemDefinitionIndex;
+        if (itemDefIndex == 60 || itemDefIndex == 61)
+        {
+            var schemaWeapon = weapon.As<CCSWeaponBase>();
+            if (schemaWeapon != null)
+            {
+                if (TryGetBoolProperty(schemaWeapon, "SilencerOn", out var weaponSilenced))
+                {
+                    return weaponSilenced;
+                }
+
+                if (TryGetBoolProperty(schemaWeapon, "IsSilenced", out weaponSilenced))
+                {
+                    return weaponSilenced;
+                }
+
+                if (TryGetBoolField(schemaWeapon, "m_bSilencerOn", out weaponSilenced))
+                {
+                    return weaponSilenced;
+                }
+
+                if (TryGetBoolField(schemaWeapon, "m_bIsSilenced", out weaponSilenced))
+                {
+                    return weaponSilenced;
+                }
+            }
+
+            if (TryGetBoolProperty(weapon, "SilencerOn", out var fallbackSilenced))
+            {
+                return fallbackSilenced;
+            }
+
+            if (TryGetBoolProperty(weapon, "IsSilenced", out fallbackSilenced))
+            {
+                return fallbackSilenced;
+            }
+
+            if (TryGetBoolField(weapon, "m_bSilencerOn", out fallbackSilenced))
+            {
+                return fallbackSilenced;
+            }
+
+            if (TryGetBoolField(weapon, "m_bIsSilenced", out fallbackSilenced))
+            {
+                return fallbackSilenced;
+            }
+        }
+
         if (TryGetGameEventBool(@event, "silenced", out var eventSilenced))
         {
             return eventSilenced;
@@ -469,50 +611,6 @@ public class EmitSoundEditorPlugin : BasePlugin, IPluginConfig<EmitSoundEditorCo
         if (TryGetBoolProperty(@event, "IsSilenced", out eventSilenced))
         {
             return eventSilenced;
-        }
-
-        var schemaWeapon = weapon.As<CCSWeaponBase>();
-        if (schemaWeapon != null)
-        {
-            if (TryGetBoolProperty(schemaWeapon, "SilencerOn", out var weaponSilenced))
-            {
-                return weaponSilenced;
-            }
-
-            if (TryGetBoolProperty(schemaWeapon, "IsSilenced", out weaponSilenced))
-            {
-                return weaponSilenced;
-            }
-
-            if (TryGetBoolField(schemaWeapon, "m_bSilencerOn", out weaponSilenced))
-            {
-                return weaponSilenced;
-            }
-
-            if (TryGetBoolField(schemaWeapon, "m_bIsSilenced", out weaponSilenced))
-            {
-                return weaponSilenced;
-            }
-        }
-
-        if (TryGetBoolProperty(weapon, "SilencerOn", out var fallbackSilenced))
-        {
-            return fallbackSilenced;
-        }
-
-        if (TryGetBoolProperty(weapon, "IsSilenced", out fallbackSilenced))
-        {
-            return fallbackSilenced;
-        }
-
-        if (TryGetBoolField(weapon, "m_bSilencerOn", out fallbackSilenced))
-        {
-            return fallbackSilenced;
-        }
-
-        if (TryGetBoolField(weapon, "m_bIsSilenced", out fallbackSilenced))
-        {
-            return fallbackSilenced;
         }
 
         return false;
@@ -551,7 +649,13 @@ public class EmitSoundEditorPlugin : BasePlugin, IPluginConfig<EmitSoundEditorCo
         }
 
         var property = target.GetType().GetProperty(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-        if (property == null || property.PropertyType != typeof(bool))
+        if (property == null)
+        {
+            return false;
+        }
+
+        var propertyType = property.PropertyType;
+        if (propertyType != typeof(bool) && !(propertyType.IsByRef && propertyType.GetElementType() == typeof(bool)))
         {
             return false;
         }
@@ -591,4 +695,6 @@ public class EmitSoundEditorPlugin : BasePlugin, IPluginConfig<EmitSoundEditorCo
     }
 
 }
+
+
 
