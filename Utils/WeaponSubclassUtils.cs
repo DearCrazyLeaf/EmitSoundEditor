@@ -5,6 +5,9 @@ namespace EmitSoundEditor.Utils;
 
 internal static class WeaponSubclassUtils
 {
+    /// <summary>
+    /// Parses a base:subclass spec string into its components.
+    /// </summary>
     internal static bool TryParseWeaponSpec(string weaponSpec, out string weaponBase, out string weaponSubclass)
     {
         weaponBase = string.Empty;
@@ -21,6 +24,9 @@ internal static class WeaponSubclassUtils
         return !string.IsNullOrEmpty(weaponBase) && !string.IsNullOrEmpty(weaponSubclass);
     }
 
+    /// <summary>
+    /// Returns an alternate base name for M4A1/USP variants when needed.
+    /// </summary>
     internal static bool TryGetAlternateBase(string designerName, int itemDefIndex, out string alternateBase)
     {
         alternateBase = string.Empty;
@@ -39,6 +45,9 @@ internal static class WeaponSubclassUtils
         return false;
     }
 
+    /// <summary>
+    /// Checks whether a subclass matches a weapon base, including alternate bases.
+    /// </summary>
     internal static bool IsSubclassMatchWeapon(CBasePlayerWeapon weapon, int itemDefIndex, string subclass)
     {
         if (!TryGetSubclassBase(subclass, out var subclassBase))
@@ -60,6 +69,9 @@ internal static class WeaponSubclassUtils
         return false;
     }
 
+    /// <summary>
+    /// Extracts the base weapon name from a raw subclass string.
+    /// </summary>
     private static bool TryGetSubclassBase(string rawSubclass, out string baseName)
     {
         baseName = string.Empty;

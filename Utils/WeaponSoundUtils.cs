@@ -5,6 +5,9 @@ namespace EmitSoundEditor.Utils;
 
 internal static class WeaponSoundUtils
 {
+    /// <summary>
+    /// Selects the silenced or unsilenced event name based on current weapon state.
+    /// </summary>
     internal static string ResolveTargetEvent(EventWeaponFire @event, CBasePlayerWeapon weapon, string targetEvent, string targetEventUnsilenced)
     {
         if (!string.IsNullOrWhiteSpace(targetEventUnsilenced) && !IsSilenced(@event, weapon))
@@ -15,8 +18,65 @@ internal static class WeaponSoundUtils
         return targetEvent;
     }
 
+    /// <summary>
+    /// Maps weapon names to a fallback item definition index for M4A1/USP variants.
+    /// </summary>
+    internal static bool TryResolveFallbackItemDefIndex(EventWeaponFire @event, CBasePlayerWeapon weapon, out int itemDefIndex)
+    {
+        itemDefIndex = 0;
+        var weaponName = @event.Weapon;
+        if (string.IsNullOrWhiteSpace(weaponName))
+        {
+            weaponName = weapon.DesignerName;
+        }
+
+        if (string.IsNullOrWhiteSpace(weaponName))
+        {
+            return false;
+        }
+
+        weaponName = weaponName.Trim().ToLowerInvariant();
+
+        switch (weaponName)
+        {
+            case "weapon_m4a1":
+            case "weapon_m4a1_silencer":
+                itemDefIndex = @event.Silenced ? 60 : 16;
+                return true;
+            case "weapon_hkp2000":
+            case "weapon_usp_silencer":
+                itemDefIndex = @event.Silenced ? 61 : 32;
+                return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Determines whether the weapon is currently silenced using event flags and weapon properties.
+    /// </summary>
     private static bool IsSilenced(EventWeaponFire @event, CBasePlayerWeapon weapon)
     {
+        if (TryGetGameEventBool(@event, "silenced", out var eventSilenced))
+        {
+            return eventSilenced;
+        }
+
+        if (TryGetGameEventBool(@event, "is_silenced", out eventSilenced))
+        {
+            return eventSilenced;
+        }
+
+        if (TryGetBoolProperty(@event, "Silenced", out eventSilenced))
+        {
+            return eventSilenced;
+        }
+
+        if (TryGetBoolProperty(@event, "IsSilenced", out eventSilenced))
+        {
+            return eventSilenced;
+        }
+
         var itemDefIndex = (int)weapon.AttributeManager.Item.ItemDefinitionIndex;
         if (itemDefIndex == 60 || itemDefIndex == 61)
         {
@@ -65,29 +125,12 @@ internal static class WeaponSoundUtils
             }
         }
 
-        if (TryGetGameEventBool(@event, "silenced", out var eventSilenced))
-        {
-            return eventSilenced;
-        }
-
-        if (TryGetGameEventBool(@event, "is_silenced", out eventSilenced))
-        {
-            return eventSilenced;
-        }
-
-        if (TryGetBoolProperty(@event, "Silenced", out eventSilenced))
-        {
-            return eventSilenced;
-        }
-
-        if (TryGetBoolProperty(@event, "IsSilenced", out eventSilenced))
-        {
-            return eventSilenced;
-        }
-
         return false;
     }
 
+    /// <summary>
+    /// Reads a boolean value from a game event field if available.
+    /// </summary>
     private static bool TryGetGameEventBool(object target, string name, out bool value)
     {
         value = false;
@@ -112,6 +155,9 @@ internal static class WeaponSoundUtils
         return false;
     }
 
+    /// <summary>
+    /// Reads a boolean property via reflection.
+    /// </summary>
     private static bool TryGetBoolProperty(object target, string name, out bool value)
     {
         value = false;
@@ -142,6 +188,9 @@ internal static class WeaponSoundUtils
         return false;
     }
 
+    /// <summary>
+    /// Reads a boolean field via reflection.
+    /// </summary>
     private static bool TryGetBoolField(object target, string name, out bool value)
     {
         value = false;
