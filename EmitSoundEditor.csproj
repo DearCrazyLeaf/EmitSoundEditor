@@ -14,6 +14,7 @@
 
     <ItemGroup>
         <PackageReference Include="CounterStrikeSharp.API" Version="*" />
+        <PackageReference Include="MySqlConnector" Version="*" />
     </ItemGroup>
     <ItemGroup>
         <ProjectReference Include="..\..\cs2-store\StoreApi\StoreApi.csproj" />
@@ -21,6 +22,14 @@
 
     <ItemGroup>
         <Compile Remove="backup\**\*.cs" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <Content Include="lang\**\*.json" CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <Content Include="$(NuGetPackageRoot)\mysqlconnector\2.5.0\lib\net8.0\MySqlConnector.dll" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
 
 </Project>

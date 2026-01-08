@@ -14,6 +14,36 @@ public class EmitSoundEditorConfig : BasePluginConfig
 
     [JsonPropertyName("force_mute_all_firebullets")]
     public bool ForceMuteAllFireBullets { get; set; } = false;
+
+    [JsonPropertyName("custom_sound_default_enabled")]
+    public bool CustomSoundDefaultEnabled { get; set; } = true;
+
+    [JsonPropertyName("mysql")]
+    public MySqlSettings MySql { get; set; } = new();
+}
+
+public class MySqlSettings
+{
+    [JsonPropertyName("enabled")]
+    public bool Enabled { get; set; } = false;
+
+    [JsonPropertyName("host")]
+    public string Host { get; set; } = "127.0.0.1";
+
+    [JsonPropertyName("port")]
+    public int Port { get; set; } = 3306;
+
+    [JsonPropertyName("database")]
+    public string Database { get; set; } = "cs2";
+
+    [JsonPropertyName("user")]
+    public string User { get; set; } = "root";
+
+    [JsonPropertyName("password")]
+    public string Password { get; set; } = "";
+
+    [JsonPropertyName("table")]
+    public string Table { get; set; } = "emsound_settings";
 }
 
 public class WeaponSoundOverride

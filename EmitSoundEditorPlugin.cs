@@ -1,10 +1,14 @@
 using System;
 using System.Collections.Generic;
-using System.Reflection;
+using System.Threading.Tasks;
+using EmitSoundEditor.Data;
+using EmitSoundEditor.Utils;
 using CounterStrikeSharp.API;
 using CounterStrikeSharp.API.Core;
 using CounterStrikeSharp.API.Core.Attributes;
 using CounterStrikeSharp.API.Core.Attributes.Registration;
+using CounterStrikeSharp.API.Core.Translations;
+using CounterStrikeSharp.API.Modules.Commands;
 using CounterStrikeSharp.API.Modules.UserMessages;
 using CounterStrikeSharp.API.Modules.Utils;
 using Microsoft.Extensions.Logging;
@@ -27,6 +31,9 @@ public class EmitSoundEditorPlugin : BasePlugin, IPluginConfig<EmitSoundEditorCo
     private readonly Dictionary<int, WeaponItemDefOverride> _overrideByItemDefIndex = new();
     private readonly Dictionary<ulong, Dictionary<string, string>> _playerSubclassByBase = new();
     private readonly Dictionary<nint, string> _subclassByWeaponHandle = new();
+    private readonly Dictionary<ulong, bool> _customSoundEnabledBySteamId = new();
+    private readonly object _customSoundLock = new();
+    private CustomSoundSettingsStore? _settingsStore;
     private readonly HashSet<int> _suppressOriginalSoundSlots = new();
     private readonly HashSet<int> _suppressOriginalSoundEntityIndices = new();
     private bool _pendingInitialRefresh;
@@ -38,11 +45,14 @@ public class EmitSoundEditorPlugin : BasePlugin, IPluginConfig<EmitSoundEditorCo
         RegisterEventHandler<EventPlayerSpawn>(OnPlayerSpawn, HookMode.Post);
         RegisterEventHandler<EventPlayerDisconnect>(OnPlayerDisconnect, HookMode.Post);
         RegisterListener<Listeners.OnMapStart>(OnMapStart);
+        RegisterListener<Listeners.OnClientPutInServer>(OnClientPutInServer);
+        RegisterListener<Listeners.OnClientDisconnect>(OnClientDisconnect);
         HookUserMessage(452, OnWeaponFireUserMessage, HookMode.Pre);
     }
 
     public override void OnAllPluginsLoaded(bool hotReload)
     {
+        InitializeSettingsStore();
         _storeApi = IStoreApi.Capability.Get();
         if (_storeApi == null)
         {
@@ -77,10 +87,58 @@ public class EmitSoundEditorPlugin : BasePlugin, IPluginConfig<EmitSoundEditorCo
         RefreshAllPlayers();
     }
 
+
+    private void OnClientPutInServer(int playerSlot)
+    {
+        var player = Utilities.GetPlayerFromSlot(playerSlot);
+        if (player == null || !player.IsValid || player.IsBot)
+        {
+            return;
+        }
+
+        if (player.SteamID == 0)
+        {
+            return;
+        }
+
+        SetCustomSoundEnabled(player.SteamID, Config.CustomSoundDefaultEnabled);
+
+        if (_settingsStore == null)
+        {
+            InitializeSettingsStore();
+        }
+
+        if (_settingsStore == null || !_settingsStore.Enabled)
+        {
+            return;
+        }
+
+        _ = LoadCustomSoundSettingAsync(player.SteamID);
+    }
+
+    private void OnClientDisconnect(int playerSlot)
+    {
+        var player = Utilities.GetPlayerFromSlot(playerSlot);
+        if (player == null || !player.IsValid)
+        {
+            return;
+        }
+
+        RemoveCustomSoundEnabled(player.SteamID);
+    }
+
+
+    private void InitializeSettingsStore()
+    {
+        _settingsStore = new CustomSoundSettingsStore(Config.MySql, Logger);
+        _ = _settingsStore.InitializeAsync();
+    }
+
     public void OnConfigParsed(EmitSoundEditorConfig config)
     {
         Config = config;
         RebuildOverrideMap();
+        InitializeSettingsStore();
     }
 
     private void RebuildOverrideMap()
@@ -152,7 +210,7 @@ public class EmitSoundEditorPlugin : BasePlugin, IPluginConfig<EmitSoundEditorCo
 
         if (_subclassByWeaponHandle.TryGetValue(weapon.Handle, out var handleSubclass))
         {
-            if (IsSubclassMatchWeapon(weapon, itemDefIndex, handleSubclass) &&
+            if (WeaponSubclassUtils.IsSubclassMatchWeapon(weapon, itemDefIndex, handleSubclass) &&
                 _overrideBySubclass.TryGetValue(handleSubclass, out customOverride))
             {
                 mappedSubclass = handleSubclass;
@@ -165,7 +223,7 @@ public class EmitSoundEditorPlugin : BasePlugin, IPluginConfig<EmitSoundEditorCo
 
         if (customOverride == null && _playerSubclassByBase.TryGetValue(player.SteamID, out var equippedByBase))
         {
-            if (TryGetAlternateBase(weapon.DesignerName, itemDefIndex, out var alternateBase) &&
+            if (WeaponSubclassUtils.TryGetAlternateBase(weapon.DesignerName, itemDefIndex, out var alternateBase) &&
                 equippedByBase.TryGetValue(alternateBase, out var alternateSubclass))
             {
                 mappedSubclass = alternateSubclass;
@@ -185,17 +243,23 @@ public class EmitSoundEditorPlugin : BasePlugin, IPluginConfig<EmitSoundEditorCo
 
         _overrideByItemDefIndex.TryGetValue(itemDefIndex, out var officialOverride);
 
-        string? targetEvent = null;
+        string? customEvent = null;
         if (customOverride != null)
         {
-            targetEvent = ResolveTargetEvent(@event, weapon, customOverride.TargetEvent, customOverride.TargetEventUnsilenced);
-        }
-        else if (officialOverride != null)
-        {
-            targetEvent = ResolveTargetEvent(@event, weapon, officialOverride.TargetEvent, officialOverride.TargetEventUnsilenced);
+            customEvent = WeaponSoundUtils.ResolveTargetEvent(@event, weapon, customOverride.TargetEvent, customOverride.TargetEventUnsilenced);
+            if (string.IsNullOrWhiteSpace(customEvent))
+            {
+                customOverride = null;
+            }
         }
 
-        if (string.IsNullOrWhiteSpace(targetEvent))
+        string? officialEvent = null;
+        if (officialOverride != null)
+        {
+            officialEvent = WeaponSoundUtils.ResolveTargetEvent(@event, weapon, officialOverride.TargetEvent, officialOverride.TargetEventUnsilenced);
+        }
+
+        if (customOverride == null && string.IsNullOrWhiteSpace(officialEvent))
         {
             return HookResult.Continue;
         }
@@ -208,7 +272,27 @@ public class EmitSoundEditorPlugin : BasePlugin, IPluginConfig<EmitSoundEditorCo
             _suppressOriginalSoundEntityIndices.Add((int)playerPawn.Index);
         }
 
-        EmitToAllPlayers(player, targetEvent);
+        if (customOverride != null && !string.IsNullOrWhiteSpace(customEvent))
+        {
+            EmitToPlayers(player, customEvent, target => IsCustomSoundEnabled(target));
+
+            if (!string.IsNullOrWhiteSpace(officialEvent))
+            {
+                EmitToPlayers(player, officialEvent, target => !IsCustomSoundEnabled(target));
+            }
+            else
+            {
+                EmitToPlayers(player, customEvent, target => !IsCustomSoundEnabled(target));
+            }
+
+            return HookResult.Continue;
+        }
+
+        if (!string.IsNullOrWhiteSpace(officialEvent))
+        {
+            EmitToAllPlayers(player, officialEvent);
+        }
+
         return HookResult.Continue;
     }
 
@@ -277,7 +361,7 @@ public class EmitSoundEditorPlugin : BasePlugin, IPluginConfig<EmitSoundEditorCo
 
         if (_subclassByWeaponHandle.TryGetValue(weapon.Handle, out var handleSubclass))
         {
-            if (IsSubclassMatchWeapon(weapon, itemDefIndex, handleSubclass))
+            if (WeaponSubclassUtils.IsSubclassMatchWeapon(weapon, itemDefIndex, handleSubclass))
             {
                 return _overrideBySubclass.ContainsKey(handleSubclass);
             }
@@ -290,7 +374,7 @@ public class EmitSoundEditorPlugin : BasePlugin, IPluginConfig<EmitSoundEditorCo
             return false;
         }
 
-        if (TryGetAlternateBase(weapon.DesignerName, itemDefIndex, out var alternateBase) &&
+        if (WeaponSubclassUtils.TryGetAlternateBase(weapon.DesignerName, itemDefIndex, out var alternateBase) &&
             equippedByBase.TryGetValue(alternateBase, out var alternateSubclass))
         {
             return _overrideBySubclass.ContainsKey(alternateSubclass);
@@ -432,23 +516,7 @@ public class EmitSoundEditorPlugin : BasePlugin, IPluginConfig<EmitSoundEditorCo
             return false;
         }
 
-        return TryParseWeaponSpec(weaponSpec, out weaponBase, out weaponSubclass);
-    }
-
-    private static bool TryParseWeaponSpec(string weaponSpec, out string weaponBase, out string weaponSubclass)
-    {
-        weaponBase = string.Empty;
-        weaponSubclass = string.Empty;
-
-        var parts = weaponSpec.Split(':', 2, StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
-        if (parts.Length < 2)
-        {
-            return false;
-        }
-
-        weaponBase = parts[0];
-        weaponSubclass = parts[1];
-        return !string.IsNullOrEmpty(weaponBase) && !string.IsNullOrEmpty(weaponSubclass);
+        return WeaponSubclassUtils.TryParseWeaponSpec(weaponSpec, out weaponBase, out weaponSubclass);
     }
 
     private Dictionary<string, string> GetOrCreatePlayerMap(ulong steamId)
@@ -510,246 +578,114 @@ public class EmitSoundEditorPlugin : BasePlugin, IPluginConfig<EmitSoundEditorCo
         _subclassByWeaponHandle.Remove(weapon.Handle);
     }
 
-    private static bool TryGetAlternateBase(string designerName, int itemDefIndex, out string alternateBase)
-    {
-        alternateBase = string.Empty;
-        if (itemDefIndex == 60 && designerName.Equals("weapon_m4a1", StringComparison.OrdinalIgnoreCase))
-        {
-            alternateBase = "weapon_m4a1_silencer";
-            return true;
-        }
-
-        if (itemDefIndex == 61 && designerName.Equals("weapon_hkp2000", StringComparison.OrdinalIgnoreCase))
-        {
-            alternateBase = "weapon_usp_silencer";
-            return true;
-        }
-
-        return false;
-    }
-
-    private static bool IsSubclassMatchWeapon(CBasePlayerWeapon weapon, int itemDefIndex, string subclass)
-    {
-        if (!TryGetSubclassBase(subclass, out var subclassBase))
-        {
-            return false;
-        }
-
-        if (string.Equals(subclassBase, weapon.DesignerName, StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        if (TryGetAlternateBase(weapon.DesignerName, itemDefIndex, out var alternateBase) &&
-            string.Equals(subclassBase, alternateBase, StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        return false;
-    }
-
-    private static bool TryGetSubclassBase(string rawSubclass, out string baseName)
-    {
-        baseName = string.Empty;
-        if (string.IsNullOrWhiteSpace(rawSubclass))
-        {
-            return false;
-        }
-
-        var subclass = rawSubclass;
-        var colonIndex = subclass.IndexOf(":", StringComparison.Ordinal);
-        if (colonIndex >= 0 && colonIndex + 1 < subclass.Length)
-        {
-            subclass = subclass[(colonIndex + 1)..];
-        }
-
-        var plusIndex = subclass.IndexOf("+", StringComparison.Ordinal);
-        baseName = (plusIndex >= 0 ? subclass[..plusIndex] : subclass).Trim();
-        return !string.IsNullOrWhiteSpace(baseName);
-    }
-
     private static void EmitToAllPlayers(CCSPlayerController source, string eventName)
+    {
+        EmitToPlayers(source, eventName, _ => true);
+    }
+
+    private static void EmitToPlayers(CCSPlayerController source, string eventName, Func<CCSPlayerController, bool> filter)
     {
         if (string.IsNullOrWhiteSpace(eventName))
         {
             return;
         }
 
-        RecipientFilter filter = new();
+        RecipientFilter recipientFilter = new();
         foreach (var player in Utilities.GetPlayers())
         {
-            if (player.IsValid)
+            if (player.IsValid && filter(player))
             {
-                filter.Add(player);
+                recipientFilter.Add(player);
             }
         }
 
-        source.EmitSound(eventName, filter);
+        source.EmitSound(eventName, recipientFilter);
     }
 
-    private static string ResolveTargetEvent(EventWeaponFire @event, CBasePlayerWeapon weapon, string targetEvent, string targetEventUnsilenced)
+
+    [ConsoleCommand("css_emsound", "Toggle custom weapon sounds")]
+    [CommandHelper(0, "Toggle custom weapon sounds", CommandUsage.CLIENT_ONLY)]
+    public void OnToggleCustomSound(CCSPlayerController? player, CommandInfo command)
     {
-        if (!string.IsNullOrWhiteSpace(targetEventUnsilenced) && !IsSilenced(@event, weapon))
+        if (player == null || !player.IsValid || player.SteamID == 0)
         {
-            return targetEventUnsilenced;
+            return;
         }
 
-        return targetEvent;
+        var enabled = !IsCustomSoundEnabled(player);
+        SetCustomSoundEnabled(player.SteamID, enabled);
+        _ = SaveCustomSoundSettingAsync(player.SteamID, enabled);
+
+        var message = Localizer.ForPlayer(player, enabled ? "emsound.enabled" : "emsound.disabled");
+        player.PrintToChat(message);
     }
 
-    private static bool IsSilenced(EventWeaponFire @event, CBasePlayerWeapon weapon)
+    private bool IsCustomSoundEnabled(CCSPlayerController player)
     {
-        var itemDefIndex = (int)weapon.AttributeManager.Item.ItemDefinitionIndex;
-        if (itemDefIndex == 60 || itemDefIndex == 61)
+        if (player == null || !player.IsValid)
         {
-            var schemaWeapon = weapon.As<CCSWeaponBase>();
-            if (schemaWeapon != null)
-            {
-                if (TryGetBoolProperty(schemaWeapon, "SilencerOn", out var weaponSilenced))
-                {
-                    return weaponSilenced;
-                }
-
-                if (TryGetBoolProperty(schemaWeapon, "IsSilenced", out weaponSilenced))
-                {
-                    return weaponSilenced;
-                }
-
-                if (TryGetBoolField(schemaWeapon, "m_bSilencerOn", out weaponSilenced))
-                {
-                    return weaponSilenced;
-                }
-
-                if (TryGetBoolField(schemaWeapon, "m_bIsSilenced", out weaponSilenced))
-                {
-                    return weaponSilenced;
-                }
-            }
-
-            if (TryGetBoolProperty(weapon, "SilencerOn", out var fallbackSilenced))
-            {
-                return fallbackSilenced;
-            }
-
-            if (TryGetBoolProperty(weapon, "IsSilenced", out fallbackSilenced))
-            {
-                return fallbackSilenced;
-            }
-
-            if (TryGetBoolField(weapon, "m_bSilencerOn", out fallbackSilenced))
-            {
-                return fallbackSilenced;
-            }
-
-            if (TryGetBoolField(weapon, "m_bIsSilenced", out fallbackSilenced))
-            {
-                return fallbackSilenced;
-            }
+            return false;
         }
 
-        if (TryGetGameEventBool(@event, "silenced", out var eventSilenced))
-        {
-            return eventSilenced;
-        }
-
-        if (TryGetGameEventBool(@event, "is_silenced", out eventSilenced))
-        {
-            return eventSilenced;
-        }
-
-        if (TryGetBoolProperty(@event, "Silenced", out eventSilenced))
-        {
-            return eventSilenced;
-        }
-
-        if (TryGetBoolProperty(@event, "IsSilenced", out eventSilenced))
-        {
-            return eventSilenced;
-        }
-
-        return false;
+        return GetCustomSoundEnabled(player.SteamID);
     }
 
-    private static bool TryGetGameEventBool(object target, string name, out bool value)
+    private bool GetCustomSoundEnabled(ulong steamId)
     {
-        value = false;
-        if (target == null)
+        lock (_customSoundLock)
         {
-            return false;
+            if (_customSoundEnabledBySteamId.TryGetValue(steamId, out var enabled))
+            {
+                return enabled;
+            }
         }
 
-        var method = target.GetType().GetMethod("GetBool", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, new[] { typeof(string) }, null);
-        if (method == null)
-        {
-            return false;
-        }
-
-        var raw = method.Invoke(target, new object[] { name });
-        if (raw is bool boolValue)
-        {
-            value = boolValue;
-            return true;
-        }
-
-        return false;
+        return Config.CustomSoundDefaultEnabled;
     }
 
-    private static bool TryGetBoolProperty(object target, string name, out bool value)
+    private void SetCustomSoundEnabled(ulong steamId, bool enabled)
     {
-        value = false;
-        if (target == null)
+        lock (_customSoundLock)
         {
-            return false;
+            _customSoundEnabledBySteamId[steamId] = enabled;
         }
-
-        var property = target.GetType().GetProperty(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-        if (property == null)
-        {
-            return false;
-        }
-
-        var propertyType = property.PropertyType;
-        if (propertyType != typeof(bool) && !(propertyType.IsByRef && propertyType.GetElementType() == typeof(bool)))
-        {
-            return false;
-        }
-
-        var raw = property.GetValue(target);
-        if (raw is bool boolValue)
-        {
-            value = boolValue;
-            return true;
-        }
-
-        return false;
     }
 
-    private static bool TryGetBoolField(object target, string name, out bool value)
+    private void RemoveCustomSoundEnabled(ulong steamId)
     {
-        value = false;
-        if (target == null)
+        lock (_customSoundLock)
         {
-            return false;
+            _customSoundEnabledBySteamId.Remove(steamId);
         }
-
-        var field = target.GetType().GetField(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-        if (field == null || field.FieldType != typeof(bool))
-        {
-            return false;
-        }
-
-        var raw = field.GetValue(target);
-        if (raw is bool boolValue)
-        {
-            value = boolValue;
-            return true;
-        }
-
-        return false;
     }
 
+
+    private async Task LoadCustomSoundSettingAsync(ulong steamId)
+    {
+        var store = _settingsStore;
+        if (steamId == 0 || store == null || !store.Enabled)
+        {
+            return;
+        }
+
+        var result = await store.LoadEnabledAsync(steamId);
+        if (result.HasValue)
+        {
+            Server.NextFrame(() => SetCustomSoundEnabled(steamId, result.Value));
+            return;
+        }
+
+        await store.SaveEnabledAsync(steamId, Config.CustomSoundDefaultEnabled);
+    }
+
+    private Task SaveCustomSoundSettingAsync(ulong steamId, bool enabled)
+    {
+        var store = _settingsStore;
+        if (steamId == 0 || store == null || !store.Enabled)
+        {
+            return Task.CompletedTask;
+        }
+
+        return store.SaveEnabledAsync(steamId, enabled);
+    }
 }
-
-
-

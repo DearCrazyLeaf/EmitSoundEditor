@@ -72,7 +72,17 @@ Path `.\counterstrikesharp\configs\plugins\EmitSoundEditor\EmitSoundEditor.json`
       "target_event_unsilenced": "dup.Weapon_M4A4.Single"
     }
   ],
-  "force_mute_all_firebullets": false
+  "force_mute_all_firebullets": false,
+  "custom_sound_default_enabled": true,
+  "mysql": {
+    "enabled": false,
+    "host": "127.0.0.1",
+    "port": 3306,
+    "database": "cs2",
+    "user": "root",
+    "password": "",
+    "table": "emsound_settings"
+  }
 }
 ```
 
@@ -89,7 +99,20 @@ Path `.\counterstrikesharp\configs\plugins\EmitSoundEditor\EmitSoundEditor.json`
 | `official_overrides[].target_event` | string | Duplicated soundevent to play on fire |
 | `official_overrides[].target_event_unsilenced` | string | Optional; used when the silencer is off |
 | `force_mute_all_firebullets` | boolean | Optional global mute for native firebullet sounds |
+| `custom_sound_default_enabled` | boolean | Default state for `!emsound` (custom sounds on/off) |
+| `mysql` | object | Optional persistence for the `!emsound` toggle |
+| `mysql.enabled` | boolean | Enable MySQL storage for per-player toggle |
+| `mysql.host` | string | MySQL host |
+| `mysql.port` | number | MySQL port |
+| `mysql.database` | string | MySQL database name |
+| `mysql.user` | string | MySQL user |
+| `mysql.password` | string | MySQL password |
+| `mysql.table` | string | Table name for toggle storage |
 
+### Toggle command + database
+
+- `!emsound` toggles custom sounds for the caller only and prints a localized message
+- If MySQL is enabled, the toggle is saved per SteamID and restored on reconnect
 
 ## Store + subclass setup (AG2 custom weapons)
 
@@ -223,7 +246,17 @@ If you only mute without duplicates, all default weapons become silent. All thre
       "target_event_unsilenced": "dup.Weapon_M4A4.Single"
     }
   ],
-  "force_mute_all_firebullets": false
+  "force_mute_all_firebullets": false,
+  "custom_sound_default_enabled": true,
+  "mysql": {
+    "enabled": false,
+    "host": "127.0.0.1",
+    "port": 3306,
+    "database": "cs2",
+    "user": "root",
+    "password": "",
+    "table": "emsound_settings"
+  }
 }
 ```
 
@@ -240,6 +273,20 @@ If you only mute without duplicates, all default weapons become silent. All thre
 | `official_overrides[].target_event` | string | 对应的副本音效事件 |
 | `official_overrides[].target_event_unsilenced` | string | 可选，不消音时使用 |
 | `force_mute_all_firebullets` | boolean | 可选，全局静音原始开火音效 |
+| `custom_sound_default_enabled` | boolean | `!emsound` 的默认状态（自定义音效开/关） |
+| `mysql` | object | 可选，`!emsound` 开关的持久化存储配置 |
+| `mysql.enabled` | boolean | 是否启用 MySQL 存储玩家开关状态 |
+| `mysql.host` | string | MySQL地址 |
+| `mysql.port` | number | MySQL端口 |
+| `mysql.database` | string | 数据库名称 |
+| `mysql.user` | string | 数据库用户名 |
+| `mysql.password` | string | 数据库密码 |
+| `mysql.table` | string | 保存开关状态的表名 |
+
+### 开关指令 + 数据库
+
+- `!emsound` 用于切换是否播放自定义音效（只对自己生效）
+- 如果启用了 MySQL，则开关状态会按 SteamID 保存在数据库中，并在重新连接时读取
 
 ## 商店与子类配置（AG2）
 
