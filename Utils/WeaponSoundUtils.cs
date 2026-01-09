@@ -1,4 +1,4 @@
-﻿using System.Reflection;
+using System.Reflection;
 using CounterStrikeSharp.API.Core;
 
 namespace EmitSoundEditor.Utils;
@@ -11,6 +11,19 @@ internal static class WeaponSoundUtils
     internal static string ResolveTargetEvent(EventWeaponFire @event, CBasePlayerWeapon weapon, string targetEvent, string targetEventUnsilenced)
     {
         if (!string.IsNullOrWhiteSpace(targetEventUnsilenced) && !IsSilenced(@event, weapon))
+        {
+            return targetEventUnsilenced;
+        }
+
+        return targetEvent;
+    }
+
+    /// <summary>
+    /// Selects the silenced or unsilenced event name based on weapon state when no event is available.
+    /// </summary>
+    internal static string ResolveTargetEvent(CBasePlayerWeapon weapon, string targetEvent, string targetEventUnsilenced)
+    {
+        if (!string.IsNullOrWhiteSpace(targetEventUnsilenced) && !IsSilenced(weapon))
         {
             return targetEventUnsilenced;
         }
@@ -53,6 +66,35 @@ internal static class WeaponSoundUtils
     }
 
     /// <summary>
+    /// Maps weapon names to a fallback item definition index using weapon state only.
+    /// </summary>
+    internal static bool TryResolveFallbackItemDefIndex(CBasePlayerWeapon weapon, out int itemDefIndex)
+    {
+        itemDefIndex = 0;
+        var weaponName = weapon.DesignerName;
+        if (string.IsNullOrWhiteSpace(weaponName))
+        {
+            return false;
+        }
+
+        weaponName = weaponName.Trim().ToLowerInvariant();
+
+        switch (weaponName)
+        {
+            case "weapon_m4a1":
+            case "weapon_m4a1_silencer":
+                itemDefIndex = IsSilenced(weapon) ? 60 : 16;
+                return true;
+            case "weapon_hkp2000":
+            case "weapon_usp_silencer":
+                itemDefIndex = IsSilenced(weapon) ? 61 : 32;
+                return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
     /// Determines whether the weapon is currently silenced using event flags and weapon properties.
     /// </summary>
     private static bool IsSilenced(EventWeaponFire @event, CBasePlayerWeapon weapon)
@@ -77,52 +119,62 @@ internal static class WeaponSoundUtils
             return eventSilenced;
         }
 
+        return IsSilenced(weapon);
+    }
+
+    /// <summary>
+    /// Determines whether the weapon is currently silenced using weapon properties only.
+    /// </summary>
+    private static bool IsSilenced(CBasePlayerWeapon weapon)
+    {
         var itemDefIndex = (int)weapon.AttributeManager.Item.ItemDefinitionIndex;
-        if (itemDefIndex == 60 || itemDefIndex == 61)
+        if (itemDefIndex != 60 && itemDefIndex != 61)
         {
-            var schemaWeapon = weapon.As<CCSWeaponBase>();
-            if (schemaWeapon != null)
+            return false;
+        }
+
+        var schemaWeapon = weapon.As<CCSWeaponBase>();
+        if (schemaWeapon != null)
+        {
+            if (TryGetBoolProperty(schemaWeapon, "SilencerOn", out var weaponSilenced))
             {
-                if (TryGetBoolProperty(schemaWeapon, "SilencerOn", out var weaponSilenced))
-                {
-                    return weaponSilenced;
-                }
-
-                if (TryGetBoolProperty(schemaWeapon, "IsSilenced", out weaponSilenced))
-                {
-                    return weaponSilenced;
-                }
-
-                if (TryGetBoolField(schemaWeapon, "m_bSilencerOn", out weaponSilenced))
-                {
-                    return weaponSilenced;
-                }
-
-                if (TryGetBoolField(schemaWeapon, "m_bIsSilenced", out weaponSilenced))
-                {
-                    return weaponSilenced;
-                }
+                return weaponSilenced;
             }
 
-            if (TryGetBoolProperty(weapon, "SilencerOn", out var fallbackSilenced))
+            if (TryGetBoolProperty(schemaWeapon, "IsSilenced", out weaponSilenced))
             {
-                return fallbackSilenced;
+                return weaponSilenced;
             }
 
-            if (TryGetBoolProperty(weapon, "IsSilenced", out fallbackSilenced))
+            if (TryGetBoolField(schemaWeapon, "m_bSilencerOn", out weaponSilenced))
             {
-                return fallbackSilenced;
+                return weaponSilenced;
             }
 
-            if (TryGetBoolField(weapon, "m_bSilencerOn", out fallbackSilenced))
+            if (TryGetBoolField(schemaWeapon, "m_bIsSilenced", out weaponSilenced))
             {
-                return fallbackSilenced;
+                return weaponSilenced;
             }
+        }
 
-            if (TryGetBoolField(weapon, "m_bIsSilenced", out fallbackSilenced))
-            {
-                return fallbackSilenced;
-            }
+        if (TryGetBoolProperty(weapon, "SilencerOn", out var fallbackSilenced))
+        {
+            return fallbackSilenced;
+        }
+
+        if (TryGetBoolProperty(weapon, "IsSilenced", out fallbackSilenced))
+        {
+            return fallbackSilenced;
+        }
+
+        if (TryGetBoolField(weapon, "m_bSilencerOn", out fallbackSilenced))
+        {
+            return fallbackSilenced;
+        }
+
+        if (TryGetBoolField(weapon, "m_bIsSilenced", out fallbackSilenced))
+        {
+            return fallbackSilenced;
         }
 
         return false;

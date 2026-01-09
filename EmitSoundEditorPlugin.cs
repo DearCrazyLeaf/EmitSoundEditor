@@ -32,12 +32,14 @@ public class EmitSoundEditorPlugin : BasePlugin, IPluginConfig<EmitSoundEditorCo
     private readonly Dictionary<ulong, Dictionary<string, string>> _playerSubclassByBase = new();
     private readonly Dictionary<nint, string> _subclassByWeaponHandle = new();
     private readonly Dictionary<int, LastFireSound> _lastFireSoundsBySlot = new();
+    private readonly Dictionary<int, CCSPlayerController> _playerByPawnIndex = new();
+    private readonly Dictionary<int, int> _pawnIndexBySlot = new();
     private readonly Dictionary<ulong, bool> _customSoundEnabledBySteamId = new();
     private readonly object _customSoundLock = new();
     private CustomSoundSettingsStore? _settingsStore;
     private bool _pendingInitialRefresh;
-    private const int EntityIndexMask = 0x7FF;
-    private const long FireCacheTtlMs = 500;
+    private const int EntityIndexMask = 0x3FFF;
+    private const long FireCacheTtlMs = 1500;
 
     /// <summary>
     /// Registers event handlers, user message hooks, and server listeners.
@@ -87,6 +89,8 @@ public class EmitSoundEditorPlugin : BasePlugin, IPluginConfig<EmitSoundEditorCo
     private void OnMapStart(string mapName)
     {
         _subclassByWeaponHandle.Clear();
+        _playerByPawnIndex.Clear();
+        _pawnIndexBySlot.Clear();
         if (!_pendingInitialRefresh || _storeApi == null)
         {
             return;
@@ -114,6 +118,7 @@ public class EmitSoundEditorPlugin : BasePlugin, IPluginConfig<EmitSoundEditorCo
         }
 
         SetCustomSoundEnabled(player.SteamID, Config.CustomSoundDefaultEnabled);
+        UpdatePawnIndexCache(player);
 
         if (_settingsStore == null)
         {
@@ -139,6 +144,7 @@ public class EmitSoundEditorPlugin : BasePlugin, IPluginConfig<EmitSoundEditorCo
             return;
         }
 
+        RemovePawnIndexCache(player);
         RemoveCustomSoundEnabled(player.SteamID);
     }
 
@@ -202,6 +208,7 @@ public class EmitSoundEditorPlugin : BasePlugin, IPluginConfig<EmitSoundEditorCo
             return HookResult.Continue;
         }
 
+        UpdatePawnIndexCache(player);
         RefreshPlayerEquipment(player);
         return HookResult.Continue;
     }
@@ -216,6 +223,7 @@ public class EmitSoundEditorPlugin : BasePlugin, IPluginConfig<EmitSoundEditorCo
         {
             _playerSubclassByBase.Remove(player.SteamID);
             _lastFireSoundsBySlot.Remove(player.Slot);
+            RemovePawnIndexCache(player);
         }
 
         return HookResult.Continue;
@@ -224,6 +232,8 @@ public class EmitSoundEditorPlugin : BasePlugin, IPluginConfig<EmitSoundEditorCo
     /// <summary>
     /// Resolves custom/official fire events and caches them for 452 playback.
     /// </summary>
+    
+    
     private HookResult OnWeaponFire(EventWeaponFire @event, GameEventInfo info)
     {
         var player = @event.Userid;
@@ -238,67 +248,9 @@ public class EmitSoundEditorPlugin : BasePlugin, IPluginConfig<EmitSoundEditorCo
             return HookResult.Continue;
         }
 
-        var itemDefIndex = (int)weapon.AttributeManager.Item.ItemDefinitionIndex;
-        WeaponSoundOverride? customOverride = null;
-        string? mappedSubclass = null;
+        UpdatePawnIndexCache(player);
 
-        if (_subclassByWeaponHandle.TryGetValue(weapon.Handle, out var handleSubclass))
-        {
-            if (WeaponSubclassUtils.IsSubclassMatchWeapon(weapon, itemDefIndex, handleSubclass) &&
-                _overrideBySubclass.TryGetValue(handleSubclass, out customOverride))
-            {
-                mappedSubclass = handleSubclass;
-            }
-            else
-            {
-                _subclassByWeaponHandle.Remove(weapon.Handle);
-            }
-        }
-
-        if (customOverride == null && _playerSubclassByBase.TryGetValue(player.SteamID, out var equippedByBase))
-        {
-            if (WeaponSubclassUtils.TryGetAlternateBase(weapon.DesignerName, itemDefIndex, out var alternateBase) &&
-                equippedByBase.TryGetValue(alternateBase, out var alternateSubclass))
-            {
-                mappedSubclass = alternateSubclass;
-                _overrideBySubclass.TryGetValue(alternateSubclass, out customOverride);
-            }
-            else if (equippedByBase.TryGetValue(weapon.DesignerName, out var baseSubclass))
-            {
-                mappedSubclass = baseSubclass;
-                _overrideBySubclass.TryGetValue(baseSubclass, out customOverride);
-            }
-        }
-
-        if (customOverride != null && mappedSubclass != null)
-        {
-            TrackWeaponSubclass(weapon, mappedSubclass);
-        }
-
-        _overrideByItemDefIndex.TryGetValue(itemDefIndex, out var officialOverride);
-
-        if (officialOverride == null && WeaponSoundUtils.TryResolveFallbackItemDefIndex(@event, weapon, out var resolvedFallbackDefIndex))
-        {
-            _overrideByItemDefIndex.TryGetValue(resolvedFallbackDefIndex, out officialOverride);
-        }
-
-        string? customEvent = null;
-        if (customOverride != null)
-        {
-            customEvent = WeaponSoundUtils.ResolveTargetEvent(@event, weapon, customOverride.TargetEvent, customOverride.TargetEventUnsilenced);
-            if (string.IsNullOrWhiteSpace(customEvent))
-            {
-                customOverride = null;
-            }
-        }
-
-        string? officialEvent = null;
-        if (officialOverride != null)
-        {
-            officialEvent = WeaponSoundUtils.ResolveTargetEvent(@event, weapon, officialOverride.TargetEvent, officialOverride.TargetEventUnsilenced);
-        }
-
-        if (customOverride == null && string.IsNullOrWhiteSpace(officialEvent))
+        if (!TryResolveFireEvents(player, weapon, @event, out var customEvent, out var officialEvent, out var itemDefIndex))
         {
             RemoveLastFireSound(player.Slot);
             return HookResult.Continue;
@@ -311,13 +263,11 @@ public class EmitSoundEditorPlugin : BasePlugin, IPluginConfig<EmitSoundEditorCo
     /// <summary>
     /// Plays cached fire events per bullet and suppresses the original message.
     /// </summary>
+    
+    
     private HookResult OnWeaponFireUserMessage(UserMessage userMessage)
     {
-        if (Config.ForceMuteAllFireBullets)
-        {
-            userMessage.Recipients.Clear();
-            return HookResult.Continue;
-        }
+        var forceMute = Config.ForceMuteAllFireBullets;
 
         var playerHandle = (int)userMessage.ReadUInt("player");
         if (playerHandle <= 0)
@@ -326,22 +276,7 @@ public class EmitSoundEditorPlugin : BasePlugin, IPluginConfig<EmitSoundEditorCo
         }
 
         var playerEntityIndex = playerHandle & EntityIndexMask;
-        CCSPlayerController? shooter = null;
-
-        foreach (var candidate in Utilities.GetPlayers())
-        {
-            if (!candidate.IsValid)
-            {
-                continue;
-            }
-
-            var pawn = candidate.PlayerPawn?.Value;
-            if (candidate.Index == playerEntityIndex || (pawn != null && pawn.IsValid && pawn.Index == playerEntityIndex))
-            {
-                shooter = candidate;
-                break;
-            }
-        }
+        var shooter = FindShooterByPawnIndex(playerEntityIndex);
 
         if (shooter == null || !shooter.IsValid)
         {
@@ -350,43 +285,108 @@ public class EmitSoundEditorPlugin : BasePlugin, IPluginConfig<EmitSoundEditorCo
 
         if (!_lastFireSoundsBySlot.TryGetValue(shooter.Slot, out var lastFire))
         {
-            return HookResult.Continue;
+            lastFire = null;
         }
 
-        if (Environment.TickCount64 - lastFire.UpdatedAtMs > FireCacheTtlMs)
+        var nowMs = Environment.TickCount64;
+        if (lastFire != null && nowMs - lastFire.UpdatedAtMs > FireCacheTtlMs)
         {
-            _lastFireSoundsBySlot.Remove(shooter.Slot);
-            return HookResult.Continue;
+            lastFire = null;
         }
 
         var itemDefIndex = (int)userMessage.ReadUInt("item_def_index");
-        if (itemDefIndex > 0 && lastFire.ItemDefIndex > 0 && itemDefIndex != lastFire.ItemDefIndex)
+        if (lastFire != null && itemDefIndex > 0 && lastFire.ItemDefIndex > 0 && itemDefIndex != lastFire.ItemDefIndex)
         {
-            return HookResult.Continue;
+            lastFire = null;
         }
 
-        if (string.IsNullOrWhiteSpace(lastFire.CustomEvent) && string.IsNullOrWhiteSpace(lastFire.OfficialEvent))
+        if (lastFire == null)
         {
-            return HookResult.Continue;
-        }
-
-        if (!string.IsNullOrWhiteSpace(lastFire.CustomEvent))
-        {
-            EmitToPlayers(shooter, lastFire.CustomEvent, target => IsCustomSoundEnabled(target));
-
-            if (!string.IsNullOrWhiteSpace(lastFire.OfficialEvent))
+            var weapon = shooter.PlayerPawn?.Value?.WeaponServices?.ActiveWeapon?.Value;
+            if (weapon == null || !weapon.IsValid)
             {
-                EmitToPlayers(shooter, lastFire.OfficialEvent, target => !IsCustomSoundEnabled(target));
+                return HookResult.Continue;
+            }
+
+            if (!TryResolveFireEvents(shooter, weapon, null, out var customEvent, out var officialEvent, out var resolvedDefIndex))
+            {
+                _lastFireSoundsBySlot.Remove(shooter.Slot);
+                return HookResult.Continue;
+            }
+
+            lastFire = new LastFireSound(resolvedDefIndex, customEvent, officialEvent, nowMs);
+            _lastFireSoundsBySlot[shooter.Slot] = lastFire;
+        }
+
+        var hasCustom = !string.IsNullOrWhiteSpace(lastFire.CustomEvent);
+        var hasOfficial = !string.IsNullOrWhiteSpace(lastFire.OfficialEvent);
+        if (!hasCustom && !hasOfficial)
+        {
+            if (forceMute)
+            {
+                userMessage.Recipients.Clear();
+            }
+
+            return HookResult.Continue;
+        }
+
+        RecipientFilter? customRecipients = null;
+        RecipientFilter? officialRecipients = null;
+
+        if (userMessage.Recipients != null)
+        {
+            foreach (var recipient in userMessage.Recipients)
+            {
+                if (recipient == null || !recipient.IsValid)
+                {
+                    continue;
+                }
+
+                if (hasCustom && IsCustomSoundEnabled(recipient))
+                {
+                    customRecipients ??= new RecipientFilter();
+                    customRecipients.Add(recipient);
+                    continue;
+                }
+
+                if (hasOfficial)
+                {
+                    officialRecipients ??= new RecipientFilter();
+                    officialRecipients.Add(recipient);
+                }
             }
         }
-        else if (!string.IsNullOrWhiteSpace(lastFire.OfficialEvent))
+
+        var shooterWantsCustom = hasCustom && IsCustomSoundEnabled(shooter);
+        if (shooterWantsCustom)
         {
-            EmitToAllPlayers(shooter, lastFire.OfficialEvent);
+            customRecipients ??= new RecipientFilter();
+            customRecipients.Add(shooter);
+        }
+        else if (hasOfficial)
+        {
+            officialRecipients ??= new RecipientFilter();
+            officialRecipients.Add(shooter);
         }
 
-        userMessage.Recipients.Clear();
+        if (customRecipients != null && hasCustom)
+        {
+            shooter.EmitSound(lastFire.CustomEvent!, customRecipients);
+        }
+
+        if (officialRecipients != null && hasOfficial)
+        {
+            shooter.EmitSound(lastFire.OfficialEvent!, officialRecipients);
+        }
+
+        if (forceMute || customRecipients != null || officialRecipients != null)
+        {
+            userMessage.Recipients.Clear();
+        }
+
         return HookResult.Continue;
     }
+
 
     /// <summary>
     /// Tracks Store equip events and maps weapon base to subclass.
@@ -638,10 +638,10 @@ public class EmitSoundEditorPlugin : BasePlugin, IPluginConfig<EmitSoundEditorCo
         public string? OfficialEvent { get; }
         public long UpdatedAtMs { get; }
 
-        /// <summary>
-    /// Initializes a cached fire event entry.
-    /// </summary>
-    public LastFireSound(int itemDefIndex, string? customEvent, string? officialEvent, long updatedAtMs)
+            /// <summary>
+        /// Initializes a cached fire event entry.
+        /// </summary>
+        public LastFireSound(int itemDefIndex, string? customEvent, string? officialEvent, long updatedAtMs)
         {
             ItemDefIndex = itemDefIndex;
             CustomEvent = customEvent;
@@ -680,6 +680,172 @@ public class EmitSoundEditorPlugin : BasePlugin, IPluginConfig<EmitSoundEditorCo
         source.EmitSound(eventName, recipientFilter);
     }
 
+
+
+    /// <summary>
+    /// Resolves custom/official fire events for a weapon, optionally using event flags.
+    /// </summary>
+    private bool TryResolveFireEvents(CCSPlayerController player, CBasePlayerWeapon weapon, EventWeaponFire? @event,
+        out string? customEvent, out string? officialEvent, out int itemDefIndex)
+    {
+        customEvent = null;
+        officialEvent = null;
+        itemDefIndex = (int)weapon.AttributeManager.Item.ItemDefinitionIndex;
+
+        WeaponSoundOverride? customOverride = null;
+        string? mappedSubclass = null;
+
+        if (_subclassByWeaponHandle.TryGetValue(weapon.Handle, out var handleSubclass))
+        {
+            if (WeaponSubclassUtils.IsSubclassMatchWeapon(weapon, itemDefIndex, handleSubclass) &&
+                _overrideBySubclass.TryGetValue(handleSubclass, out customOverride))
+            {
+                mappedSubclass = handleSubclass;
+            }
+            else
+            {
+                _subclassByWeaponHandle.Remove(weapon.Handle);
+            }
+        }
+
+        if (customOverride == null && _playerSubclassByBase.TryGetValue(player.SteamID, out var equippedByBase))
+        {
+            if (WeaponSubclassUtils.TryGetAlternateBase(weapon.DesignerName, itemDefIndex, out var alternateBase) &&
+                equippedByBase.TryGetValue(alternateBase, out var alternateSubclass))
+            {
+                mappedSubclass = alternateSubclass;
+                _overrideBySubclass.TryGetValue(alternateSubclass, out customOverride);
+            }
+            else if (equippedByBase.TryGetValue(weapon.DesignerName, out var baseSubclass))
+            {
+                mappedSubclass = baseSubclass;
+                _overrideBySubclass.TryGetValue(baseSubclass, out customOverride);
+            }
+        }
+
+        if (customOverride != null && mappedSubclass != null)
+        {
+            TrackWeaponSubclass(weapon, mappedSubclass);
+        }
+
+        _overrideByItemDefIndex.TryGetValue(itemDefIndex, out var officialOverride);
+
+        if (officialOverride == null)
+        {
+            if (@event != null)
+            {
+                if (WeaponSoundUtils.TryResolveFallbackItemDefIndex(@event, weapon, out var fallbackIndex))
+                {
+                    _overrideByItemDefIndex.TryGetValue(fallbackIndex, out officialOverride);
+                }
+            }
+            else
+            {
+                if (WeaponSoundUtils.TryResolveFallbackItemDefIndex(weapon, out var fallbackIndex))
+                {
+                    _overrideByItemDefIndex.TryGetValue(fallbackIndex, out officialOverride);
+                }
+            }
+        }
+
+        if (customOverride != null)
+        {
+            customEvent = @event != null
+                ? WeaponSoundUtils.ResolveTargetEvent(@event, weapon, customOverride.TargetEvent, customOverride.TargetEventUnsilenced)
+                : WeaponSoundUtils.ResolveTargetEvent(weapon, customOverride.TargetEvent, customOverride.TargetEventUnsilenced);
+
+            if (string.IsNullOrWhiteSpace(customEvent))
+            {
+                customOverride = null;
+            }
+        }
+
+        if (officialOverride != null)
+        {
+            officialEvent = @event != null
+                ? WeaponSoundUtils.ResolveTargetEvent(@event, weapon, officialOverride.TargetEvent, officialOverride.TargetEventUnsilenced)
+                : WeaponSoundUtils.ResolveTargetEvent(weapon, officialOverride.TargetEvent, officialOverride.TargetEventUnsilenced);
+        }
+
+        return customOverride != null || !string.IsNullOrWhiteSpace(officialEvent);
+    }
+
+    /// <summary>
+    /// Updates the pawn-index cache for fast 452 lookups.
+    /// </summary>
+    private void UpdatePawnIndexCache(CCSPlayerController player)
+    {
+        if (player == null || !player.IsValid)
+        {
+            return;
+        }
+
+        var pawn = player.PlayerPawn?.Value;
+        if (pawn == null || !pawn.IsValid)
+        {
+            return;
+        }
+
+        var pawnIndex = (int)pawn.Index;
+        if (_pawnIndexBySlot.TryGetValue(player.Slot, out var oldIndex) && oldIndex != pawnIndex)
+        {
+            _playerByPawnIndex.Remove(oldIndex);
+        }
+
+        _pawnIndexBySlot[player.Slot] = pawnIndex;
+        _playerByPawnIndex[pawnIndex] = player;
+    }
+
+    /// <summary>
+    /// Removes pawn-index cache entries for a player.
+    /// </summary>
+    private void RemovePawnIndexCache(CCSPlayerController player)
+    {
+        if (player == null)
+        {
+            return;
+        }
+
+        if (_pawnIndexBySlot.TryGetValue(player.Slot, out var pawnIndex))
+        {
+            _pawnIndexBySlot.Remove(player.Slot);
+            _playerByPawnIndex.Remove(pawnIndex);
+        }
+    }
+
+    /// <summary>
+    /// Resolves the shooter controller from a pawn index.
+    /// </summary>
+    private CCSPlayerController? FindShooterByPawnIndex(int pawnIndex)
+    {
+        if (pawnIndex <= 0)
+        {
+            return null;
+        }
+
+        if (_playerByPawnIndex.TryGetValue(pawnIndex, out var cached) &&
+            cached.IsValid && cached.PlayerPawn?.Value?.Index == pawnIndex)
+        {
+            return cached;
+        }
+
+        foreach (var candidate in Utilities.GetPlayers())
+        {
+            if (!candidate.IsValid)
+            {
+                continue;
+            }
+
+            var pawn = candidate.PlayerPawn?.Value;
+            if (candidate.Index == pawnIndex || (pawn != null && pawn.IsValid && pawn.Index == pawnIndex))
+            {
+                UpdatePawnIndexCache(candidate);
+                return candidate;
+            }
+        }
+
+        return null;
+    }
 
     [ConsoleCommand("css_emsound", "Toggle custom weapon sounds")]
     [CommandHelper(0, "Toggle custom weapon sounds", CommandUsage.CLIENT_ONLY)]
