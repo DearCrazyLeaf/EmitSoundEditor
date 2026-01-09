@@ -31,13 +31,15 @@ public class EmitSoundEditorPlugin : BasePlugin, IPluginConfig<EmitSoundEditorCo
     private readonly Dictionary<int, WeaponItemDefOverride> _overrideByItemDefIndex = new();
     private readonly Dictionary<ulong, Dictionary<string, string>> _playerSubclassByBase = new();
     private readonly Dictionary<nint, string> _subclassByWeaponHandle = new();
-    private readonly Dictionary<int, LastFireSound> _lastFireSoundsBySlot = new();
+    private readonly LastFireSound?[] _lastFireSoundsBySlot = new LastFireSound?[MaxPlayerSlots];
     private readonly Dictionary<int, CCSPlayerController> _playerByPawnIndex = new();
     private readonly Dictionary<int, int> _pawnIndexBySlot = new();
+    private readonly bool[] _customSoundEnabledBySlot = new bool[MaxPlayerSlots];
     private readonly Dictionary<ulong, bool> _customSoundEnabledBySteamId = new();
     private readonly object _customSoundLock = new();
     private CustomSoundSettingsStore? _settingsStore;
     private bool _pendingInitialRefresh;
+    private const int MaxPlayerSlots = 65;
     private const int EntityIndexMask = 0x3FFF;
     private const long FireCacheTtlMs = 1500;
 
@@ -61,6 +63,17 @@ public class EmitSoundEditorPlugin : BasePlugin, IPluginConfig<EmitSoundEditorCo
     public override void OnAllPluginsLoaded(bool hotReload)
     {
         InitializeSettingsStore();
+
+        try
+        {
+            RefreshCustomSoundCacheForAllPlayers();
+        }
+        catch (NativeException)
+        {
+            _pendingInitialRefresh = true;
+            Logger.LogInformation("[EmitSoundEditor] Delaying initial sound cache sync until map start.");
+        }
+
         _storeApi = IStoreApi.Capability.Get();
         if (_storeApi == null)
         {
@@ -91,6 +104,10 @@ public class EmitSoundEditorPlugin : BasePlugin, IPluginConfig<EmitSoundEditorCo
         _subclassByWeaponHandle.Clear();
         _playerByPawnIndex.Clear();
         _pawnIndexBySlot.Clear();
+        Array.Clear(_lastFireSoundsBySlot, 0, _lastFireSoundsBySlot.Length);
+
+        RefreshCustomSoundCacheForAllPlayers();
+
         if (!_pendingInitialRefresh || _storeApi == null)
         {
             return;
@@ -117,7 +134,7 @@ public class EmitSoundEditorPlugin : BasePlugin, IPluginConfig<EmitSoundEditorCo
             return;
         }
 
-        SetCustomSoundEnabled(player.SteamID, Config.CustomSoundDefaultEnabled);
+        SetCustomSoundEnabledForPlayer(player, Config.CustomSoundDefaultEnabled);
         UpdatePawnIndexCache(player);
 
         if (_settingsStore == null)
@@ -145,6 +162,7 @@ public class EmitSoundEditorPlugin : BasePlugin, IPluginConfig<EmitSoundEditorCo
         }
 
         RemovePawnIndexCache(player);
+        ClearCustomSoundEnabledForPlayer(player);
         RemoveCustomSoundEnabled(player.SteamID);
     }
 
@@ -222,7 +240,7 @@ public class EmitSoundEditorPlugin : BasePlugin, IPluginConfig<EmitSoundEditorCo
         if (player != null)
         {
             _playerSubclassByBase.Remove(player.SteamID);
-            _lastFireSoundsBySlot.Remove(player.Slot);
+            ClearLastFireSound(player.Slot);
             RemovePawnIndexCache(player);
         }
 
@@ -283,20 +301,19 @@ public class EmitSoundEditorPlugin : BasePlugin, IPluginConfig<EmitSoundEditorCo
             return HookResult.Continue;
         }
 
-        if (!_lastFireSoundsBySlot.TryGetValue(shooter.Slot, out var lastFire))
-        {
-            lastFire = null;
-        }
+        var lastFire = TryGetLastFireSound(shooter.Slot);
 
         var nowMs = Environment.TickCount64;
         if (lastFire != null && nowMs - lastFire.UpdatedAtMs > FireCacheTtlMs)
         {
+            ClearLastFireSound(shooter.Slot);
             lastFire = null;
         }
 
         var itemDefIndex = (int)userMessage.ReadUInt("item_def_index");
         if (lastFire != null && itemDefIndex > 0 && lastFire.ItemDefIndex > 0 && itemDefIndex != lastFire.ItemDefIndex)
         {
+            ClearLastFireSound(shooter.Slot);
             lastFire = null;
         }
 
@@ -310,12 +327,12 @@ public class EmitSoundEditorPlugin : BasePlugin, IPluginConfig<EmitSoundEditorCo
 
             if (!TryResolveFireEvents(shooter, weapon, null, out var customEvent, out var officialEvent, out var resolvedDefIndex))
             {
-                _lastFireSoundsBySlot.Remove(shooter.Slot);
+                ClearLastFireSound(shooter.Slot);
                 return HookResult.Continue;
             }
 
             lastFire = new LastFireSound(resolvedDefIndex, customEvent, officialEvent, nowMs);
-            _lastFireSoundsBySlot[shooter.Slot] = lastFire;
+            SetLastFireSound(shooter.Slot, lastFire);
         }
 
         var hasCustom = !string.IsNullOrWhiteSpace(lastFire.CustomEvent);
@@ -513,6 +530,32 @@ public class EmitSoundEditorPlugin : BasePlugin, IPluginConfig<EmitSoundEditorCo
     }
 
     /// <summary>
+    /// Refreshes the per-slot custom sound cache for connected players.
+    /// </summary>
+    private void RefreshCustomSoundCacheForAllPlayers()
+    {
+        foreach (var player in Utilities.GetPlayers())
+        {
+            if (!player.IsValid || player.IsBot || player.SteamID == 0)
+            {
+                continue;
+            }
+
+            UpdatePawnIndexCache(player);
+
+            if (IsValidSlot(player.Slot))
+            {
+                _customSoundEnabledBySlot[player.Slot] = GetCustomSoundEnabled(player.SteamID);
+            }
+
+            if (_settingsStore != null && _settingsStore.Enabled)
+            {
+                _ = LoadCustomSoundSettingAsync(player.SteamID);
+            }
+        }
+    }
+
+    /// <summary>
     /// Checks whether a Store item is a custom weapon entry.
     /// </summary>
     private static bool IsCustomWeaponItem(Dictionary<string, string> item)
@@ -613,6 +656,11 @@ public class EmitSoundEditorPlugin : BasePlugin, IPluginConfig<EmitSoundEditorCo
     /// </summary>
     private void UpdateLastFireSound(int slot, int itemDefIndex, string? customEvent, string? officialEvent)
     {
+        if (!IsValidSlot(slot))
+        {
+            return;
+        }
+
         _lastFireSoundsBySlot[slot] = new LastFireSound(
             itemDefIndex,
             string.IsNullOrWhiteSpace(customEvent) ? null : customEvent,
@@ -625,7 +673,7 @@ public class EmitSoundEditorPlugin : BasePlugin, IPluginConfig<EmitSoundEditorCo
     /// </summary>
     private void RemoveLastFireSound(int slot)
     {
-        _lastFireSoundsBySlot.Remove(slot);
+        ClearLastFireSound(slot);
     }
 
     /// <summary>
@@ -847,6 +895,108 @@ public class EmitSoundEditorPlugin : BasePlugin, IPluginConfig<EmitSoundEditorCo
         return null;
     }
 
+    /// <summary>
+    /// Sets the custom sound toggle for a player and caches it by slot.
+    /// </summary>
+    private void SetCustomSoundEnabledForPlayer(CCSPlayerController player, bool enabled)
+    {
+        if (player == null || !player.IsValid)
+        {
+            return;
+        }
+
+        SetCustomSoundEnabled(player.SteamID, enabled);
+        if (IsValidSlot(player.Slot))
+        {
+            _customSoundEnabledBySlot[player.Slot] = enabled;
+        }
+    }
+
+    /// <summary>
+    /// Clears the cached toggle for a player slot.
+    /// </summary>
+    private void ClearCustomSoundEnabledForPlayer(CCSPlayerController player)
+    {
+        if (player == null)
+        {
+            return;
+        }
+
+        if (IsValidSlot(player.Slot))
+        {
+            _customSoundEnabledBySlot[player.Slot] = Config.CustomSoundDefaultEnabled;
+        }
+    }
+
+    /// <summary>
+    /// Updates the slot cache for a SteamID if the player is connected.
+    /// </summary>
+    private void SetCustomSoundEnabledFromSteamId(ulong steamId, bool enabled)
+    {
+        SetCustomSoundEnabled(steamId, enabled);
+        foreach (var candidate in Utilities.GetPlayers())
+        {
+            if (!candidate.IsValid || candidate.SteamID != steamId)
+            {
+                continue;
+            }
+
+            if (IsValidSlot(candidate.Slot))
+            {
+                _customSoundEnabledBySlot[candidate.Slot] = enabled;
+            }
+
+            break;
+        }
+    }
+
+    /// <summary>
+    /// Returns a cached fire sound entry if present.
+    /// </summary>
+    private LastFireSound? TryGetLastFireSound(int slot)
+    {
+        if (!IsValidSlot(slot))
+        {
+            return null;
+        }
+
+        return _lastFireSoundsBySlot[slot];
+    }
+
+    /// <summary>
+    /// Writes a cached fire sound entry for a slot.
+    /// </summary>
+    private void SetLastFireSound(int slot, LastFireSound sound)
+    {
+        if (!IsValidSlot(slot))
+        {
+            return;
+        }
+
+        _lastFireSoundsBySlot[slot] = sound;
+    }
+
+    /// <summary>
+    /// Clears cached fire sound data for a slot.
+    /// </summary>
+    private void ClearLastFireSound(int slot)
+    {
+        if (!IsValidSlot(slot))
+        {
+            return;
+        }
+
+        _lastFireSoundsBySlot[slot] = null;
+    }
+
+    /// <summary>
+    /// Validates a player slot index.
+    /// </summary>
+    private static bool IsValidSlot(int slot)
+    {
+        return slot >= 0 && slot < MaxPlayerSlots;
+    }
+
     [ConsoleCommand("css_emsound", "Toggle custom weapon sounds")]
     [CommandHelper(0, "Toggle custom weapon sounds", CommandUsage.CLIENT_ONLY)]
     /// <summary>
@@ -860,7 +1010,7 @@ public class EmitSoundEditorPlugin : BasePlugin, IPluginConfig<EmitSoundEditorCo
         }
 
         var enabled = !IsCustomSoundEnabled(player);
-        SetCustomSoundEnabled(player.SteamID, enabled);
+        SetCustomSoundEnabledForPlayer(player, enabled);
         _ = SaveCustomSoundSettingAsync(player.SteamID, enabled);
 
         var message = Localizer.ForPlayer(player, enabled ? "emsound.enabled" : "emsound.disabled");
@@ -875,6 +1025,11 @@ public class EmitSoundEditorPlugin : BasePlugin, IPluginConfig<EmitSoundEditorCo
         if (player == null || !player.IsValid)
         {
             return false;
+        }
+
+        if (IsValidSlot(player.Slot))
+        {
+            return _customSoundEnabledBySlot[player.Slot];
         }
 
         return GetCustomSoundEnabled(player.SteamID);
@@ -933,7 +1088,7 @@ public class EmitSoundEditorPlugin : BasePlugin, IPluginConfig<EmitSoundEditorCo
         var result = await store.LoadEnabledAsync(steamId);
         if (result.HasValue)
         {
-            Server.NextFrame(() => SetCustomSoundEnabled(steamId, result.Value));
+            Server.NextFrame(() => SetCustomSoundEnabledFromSteamId(steamId, result.Value));
             return;
         }
 
