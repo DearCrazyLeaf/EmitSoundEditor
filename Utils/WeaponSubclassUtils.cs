@@ -69,6 +69,46 @@ internal static class WeaponSubclassUtils
         return false;
     }
 
+
+    /// <summary>
+    /// Chooses the best base name for subclass matching (event weapon > item def > designer).
+    /// </summary>
+    internal static string ResolveEffectiveBase(string? eventWeapon, string? designerName, int itemDefIndex)
+    {
+        if (!string.IsNullOrWhiteSpace(eventWeapon))
+        {
+            return eventWeapon.Trim();
+        }
+
+        if (itemDefIndex == 64)
+        {
+            return "weapon_revolver";
+        }
+
+        return designerName ?? string.Empty;
+    }
+
+    /// <summary>
+    /// Compares a subclass string against an expected base weapon name.
+    /// </summary>
+    internal static bool IsSubclassMatchBase(string subclass, string baseName)
+    {
+        if (string.IsNullOrWhiteSpace(subclass) || string.IsNullOrWhiteSpace(baseName))
+        {
+            return false;
+        }
+
+        var raw = subclass;
+        var colonIndex = raw.IndexOf(':');
+        if (colonIndex >= 0 && colonIndex + 1 < raw.Length)
+        {
+            raw = raw[(colonIndex + 1)..];
+        }
+
+        var plusIndex = raw.IndexOf('+');
+        var subclassBase = (plusIndex >= 0 ? raw[..plusIndex] : raw).Trim();
+        return subclassBase.Equals(baseName.Trim(), StringComparison.OrdinalIgnoreCase);
+    }
     /// <summary>
     /// Extracts the base weapon name from a raw subclass string.
     /// </summary>

@@ -31,9 +31,8 @@ public class EmitSoundEditorPlugin : BasePlugin, IPluginConfig<EmitSoundEditorCo
     private readonly Dictionary<int, WeaponItemDefOverride> _overrideByItemDefIndex = new();
     private readonly Dictionary<ulong, Dictionary<string, string>> _playerSubclassByBase = new();
     private readonly Dictionary<nint, string> _subclassByWeaponHandle = new();
-    private readonly LastFireSound?[] _lastFireSoundsBySlot = new LastFireSound?[MaxPlayerSlots];
-    private readonly Dictionary<int, CCSPlayerController> _playerByPawnIndex = new();
-    private readonly Dictionary<int, int> _pawnIndexBySlot = new();
+    private readonly FireSoundCache _fireSoundCache = new(MaxPlayerSlots);
+    private readonly PlayerPawnCache _pawnCache = new();
     private readonly bool[] _customSoundEnabledBySlot = new bool[MaxPlayerSlots];
     private readonly Dictionary<ulong, bool> _customSoundEnabledBySteamId = new();
     private readonly object _customSoundLock = new();
@@ -102,9 +101,8 @@ public class EmitSoundEditorPlugin : BasePlugin, IPluginConfig<EmitSoundEditorCo
     private void OnMapStart(string mapName)
     {
         _subclassByWeaponHandle.Clear();
-        _playerByPawnIndex.Clear();
-        _pawnIndexBySlot.Clear();
-        Array.Clear(_lastFireSoundsBySlot, 0, _lastFireSoundsBySlot.Length);
+        _pawnCache.Clear();
+        _fireSoundCache.ClearAll();
 
         RefreshCustomSoundCacheForAllPlayers();
 
@@ -135,7 +133,7 @@ public class EmitSoundEditorPlugin : BasePlugin, IPluginConfig<EmitSoundEditorCo
         }
 
         SetCustomSoundEnabledForPlayer(player, Config.CustomSoundDefaultEnabled);
-        UpdatePawnIndexCache(player);
+        _pawnCache.Update(player);
 
         if (_settingsStore == null)
         {
@@ -161,7 +159,7 @@ public class EmitSoundEditorPlugin : BasePlugin, IPluginConfig<EmitSoundEditorCo
             return;
         }
 
-        RemovePawnIndexCache(player);
+        _pawnCache.Remove(player);
         ClearCustomSoundEnabledForPlayer(player);
         RemoveCustomSoundEnabled(player.SteamID);
     }
@@ -226,7 +224,7 @@ public class EmitSoundEditorPlugin : BasePlugin, IPluginConfig<EmitSoundEditorCo
             return HookResult.Continue;
         }
 
-        UpdatePawnIndexCache(player);
+        _pawnCache.Update(player);
         RefreshPlayerEquipment(player);
         return HookResult.Continue;
     }
@@ -240,8 +238,8 @@ public class EmitSoundEditorPlugin : BasePlugin, IPluginConfig<EmitSoundEditorCo
         if (player != null)
         {
             _playerSubclassByBase.Remove(player.SteamID);
-            ClearLastFireSound(player.Slot);
-            RemovePawnIndexCache(player);
+            _fireSoundCache.Clear(player.Slot);
+            _pawnCache.Remove(player);
         }
 
         return HookResult.Continue;
@@ -266,15 +264,16 @@ public class EmitSoundEditorPlugin : BasePlugin, IPluginConfig<EmitSoundEditorCo
             return HookResult.Continue;
         }
 
-        UpdatePawnIndexCache(player);
+
+        _pawnCache.Update(player);
 
         if (!TryResolveFireEvents(player, weapon, @event, out var customEvent, out var officialEvent, out var itemDefIndex))
         {
-            RemoveLastFireSound(player.Slot);
+            _fireSoundCache.Clear(player.Slot);
             return HookResult.Continue;
         }
 
-        UpdateLastFireSound(player.Slot, itemDefIndex, customEvent, officialEvent);
+        _fireSoundCache.Update(player.Slot, itemDefIndex, customEvent, officialEvent, Environment.TickCount64);
         return HookResult.Continue;
     }
 
@@ -294,26 +293,26 @@ public class EmitSoundEditorPlugin : BasePlugin, IPluginConfig<EmitSoundEditorCo
         }
 
         var playerEntityIndex = playerHandle & EntityIndexMask;
-        var shooter = FindShooterByPawnIndex(playerEntityIndex);
+        var shooter = _pawnCache.Find(playerEntityIndex);
 
         if (shooter == null || !shooter.IsValid)
         {
             return HookResult.Continue;
         }
 
-        var lastFire = TryGetLastFireSound(shooter.Slot);
+        var lastFire = _fireSoundCache.Get(shooter.Slot);
 
         var nowMs = Environment.TickCount64;
         if (lastFire != null && nowMs - lastFire.UpdatedAtMs > FireCacheTtlMs)
         {
-            ClearLastFireSound(shooter.Slot);
+            _fireSoundCache.Clear(shooter.Slot);
             lastFire = null;
         }
 
         var itemDefIndex = (int)userMessage.ReadUInt("item_def_index");
         if (lastFire != null && itemDefIndex > 0 && lastFire.ItemDefIndex > 0 && itemDefIndex != lastFire.ItemDefIndex)
         {
-            ClearLastFireSound(shooter.Slot);
+            _fireSoundCache.Clear(shooter.Slot);
             lastFire = null;
         }
 
@@ -327,12 +326,12 @@ public class EmitSoundEditorPlugin : BasePlugin, IPluginConfig<EmitSoundEditorCo
 
             if (!TryResolveFireEvents(shooter, weapon, null, out var customEvent, out var officialEvent, out var resolvedDefIndex))
             {
-                ClearLastFireSound(shooter.Slot);
+                _fireSoundCache.Clear(shooter.Slot);
                 return HookResult.Continue;
             }
 
-            lastFire = new LastFireSound(resolvedDefIndex, customEvent, officialEvent, nowMs);
-            SetLastFireSound(shooter.Slot, lastFire);
+            lastFire = new FireSoundEntry(resolvedDefIndex, customEvent, officialEvent, nowMs);
+            _fireSoundCache.Set(shooter.Slot, lastFire);
         }
 
         var hasCustom = !string.IsNullOrWhiteSpace(lastFire.CustomEvent);
@@ -541,7 +540,7 @@ public class EmitSoundEditorPlugin : BasePlugin, IPluginConfig<EmitSoundEditorCo
                 continue;
             }
 
-            UpdatePawnIndexCache(player);
+            _pawnCache.Update(player);
 
             if (IsValidSlot(player.Slot))
             {
@@ -651,52 +650,6 @@ public class EmitSoundEditorPlugin : BasePlugin, IPluginConfig<EmitSoundEditorCo
         _subclassByWeaponHandle.Remove(weapon.Handle);
     }
 
-    /// <summary>
-    /// Caches resolved fire events for per-bullet playback.
-    /// </summary>
-    private void UpdateLastFireSound(int slot, int itemDefIndex, string? customEvent, string? officialEvent)
-    {
-        if (!IsValidSlot(slot))
-        {
-            return;
-        }
-
-        _lastFireSoundsBySlot[slot] = new LastFireSound(
-            itemDefIndex,
-            string.IsNullOrWhiteSpace(customEvent) ? null : customEvent,
-            string.IsNullOrWhiteSpace(officialEvent) ? null : officialEvent,
-            Environment.TickCount64);
-    }
-
-    /// <summary>
-    /// Clears cached fire events for a player slot.
-    /// </summary>
-    private void RemoveLastFireSound(int slot)
-    {
-        ClearLastFireSound(slot);
-    }
-
-    /// <summary>
-    /// Holds the last resolved fire events for a player slot.
-    /// </summary>
-    private sealed class LastFireSound
-    {
-        public int ItemDefIndex { get; }
-        public string? CustomEvent { get; }
-        public string? OfficialEvent { get; }
-        public long UpdatedAtMs { get; }
-
-            /// <summary>
-        /// Initializes a cached fire event entry.
-        /// </summary>
-        public LastFireSound(int itemDefIndex, string? customEvent, string? officialEvent, long updatedAtMs)
-        {
-            ItemDefIndex = itemDefIndex;
-            CustomEvent = customEvent;
-            OfficialEvent = officialEvent;
-            UpdatedAtMs = updatedAtMs;
-        }
-    }
 
     /// <summary>
     /// Emits a sound event to all players.
@@ -742,10 +695,17 @@ public class EmitSoundEditorPlugin : BasePlugin, IPluginConfig<EmitSoundEditorCo
 
         WeaponSoundOverride? customOverride = null;
         string? mappedSubclass = null;
+        var effectiveBase = WeaponSubclassUtils.ResolveEffectiveBase(@event?.Weapon, weapon.DesignerName, itemDefIndex);
+        if (string.IsNullOrWhiteSpace(effectiveBase))
+        {
+            effectiveBase = weapon.DesignerName ?? string.Empty;
+        }
 
         if (_subclassByWeaponHandle.TryGetValue(weapon.Handle, out var handleSubclass))
         {
-            if (WeaponSubclassUtils.IsSubclassMatchWeapon(weapon, itemDefIndex, handleSubclass) &&
+            if ((WeaponSubclassUtils.IsSubclassMatchBase(handleSubclass, effectiveBase) ||
+                (WeaponSubclassUtils.TryGetAlternateBase(effectiveBase, itemDefIndex, out var alternateBase) &&
+                    WeaponSubclassUtils.IsSubclassMatchBase(handleSubclass, alternateBase))) &&
                 _overrideBySubclass.TryGetValue(handleSubclass, out customOverride))
             {
                 mappedSubclass = handleSubclass;
@@ -758,13 +718,13 @@ public class EmitSoundEditorPlugin : BasePlugin, IPluginConfig<EmitSoundEditorCo
 
         if (customOverride == null && _playerSubclassByBase.TryGetValue(player.SteamID, out var equippedByBase))
         {
-            if (WeaponSubclassUtils.TryGetAlternateBase(weapon.DesignerName, itemDefIndex, out var alternateBase) &&
+            if (WeaponSubclassUtils.TryGetAlternateBase(effectiveBase, itemDefIndex, out var alternateBase) &&
                 equippedByBase.TryGetValue(alternateBase, out var alternateSubclass))
             {
                 mappedSubclass = alternateSubclass;
                 _overrideBySubclass.TryGetValue(alternateSubclass, out customOverride);
             }
-            else if (equippedByBase.TryGetValue(weapon.DesignerName, out var baseSubclass))
+            else if (equippedByBase.TryGetValue(effectiveBase, out var baseSubclass))
             {
                 mappedSubclass = baseSubclass;
                 _overrideBySubclass.TryGetValue(baseSubclass, out customOverride);
@@ -818,82 +778,6 @@ public class EmitSoundEditorPlugin : BasePlugin, IPluginConfig<EmitSoundEditorCo
         return customOverride != null || !string.IsNullOrWhiteSpace(officialEvent);
     }
 
-    /// <summary>
-    /// Updates the pawn-index cache for fast 452 lookups.
-    /// </summary>
-    private void UpdatePawnIndexCache(CCSPlayerController player)
-    {
-        if (player == null || !player.IsValid)
-        {
-            return;
-        }
-
-        var pawn = player.PlayerPawn?.Value;
-        if (pawn == null || !pawn.IsValid)
-        {
-            return;
-        }
-
-        var pawnIndex = (int)pawn.Index;
-        if (_pawnIndexBySlot.TryGetValue(player.Slot, out var oldIndex) && oldIndex != pawnIndex)
-        {
-            _playerByPawnIndex.Remove(oldIndex);
-        }
-
-        _pawnIndexBySlot[player.Slot] = pawnIndex;
-        _playerByPawnIndex[pawnIndex] = player;
-    }
-
-    /// <summary>
-    /// Removes pawn-index cache entries for a player.
-    /// </summary>
-    private void RemovePawnIndexCache(CCSPlayerController player)
-    {
-        if (player == null)
-        {
-            return;
-        }
-
-        if (_pawnIndexBySlot.TryGetValue(player.Slot, out var pawnIndex))
-        {
-            _pawnIndexBySlot.Remove(player.Slot);
-            _playerByPawnIndex.Remove(pawnIndex);
-        }
-    }
-
-    /// <summary>
-    /// Resolves the shooter controller from a pawn index.
-    /// </summary>
-    private CCSPlayerController? FindShooterByPawnIndex(int pawnIndex)
-    {
-        if (pawnIndex <= 0)
-        {
-            return null;
-        }
-
-        if (_playerByPawnIndex.TryGetValue(pawnIndex, out var cached) &&
-            cached.IsValid && cached.PlayerPawn?.Value?.Index == pawnIndex)
-        {
-            return cached;
-        }
-
-        foreach (var candidate in Utilities.GetPlayers())
-        {
-            if (!candidate.IsValid)
-            {
-                continue;
-            }
-
-            var pawn = candidate.PlayerPawn?.Value;
-            if (candidate.Index == pawnIndex || (pawn != null && pawn.IsValid && pawn.Index == pawnIndex))
-            {
-                UpdatePawnIndexCache(candidate);
-                return candidate;
-            }
-        }
-
-        return null;
-    }
 
     /// <summary>
     /// Sets the custom sound toggle for a player and caches it by slot.
@@ -950,44 +834,6 @@ public class EmitSoundEditorPlugin : BasePlugin, IPluginConfig<EmitSoundEditorCo
         }
     }
 
-    /// <summary>
-    /// Returns a cached fire sound entry if present.
-    /// </summary>
-    private LastFireSound? TryGetLastFireSound(int slot)
-    {
-        if (!IsValidSlot(slot))
-        {
-            return null;
-        }
-
-        return _lastFireSoundsBySlot[slot];
-    }
-
-    /// <summary>
-    /// Writes a cached fire sound entry for a slot.
-    /// </summary>
-    private void SetLastFireSound(int slot, LastFireSound sound)
-    {
-        if (!IsValidSlot(slot))
-        {
-            return;
-        }
-
-        _lastFireSoundsBySlot[slot] = sound;
-    }
-
-    /// <summary>
-    /// Clears cached fire sound data for a slot.
-    /// </summary>
-    private void ClearLastFireSound(int slot)
-    {
-        if (!IsValidSlot(slot))
-        {
-            return;
-        }
-
-        _lastFireSoundsBySlot[slot] = null;
-    }
 
     /// <summary>
     /// Validates a player slot index.
@@ -996,6 +842,7 @@ public class EmitSoundEditorPlugin : BasePlugin, IPluginConfig<EmitSoundEditorCo
     {
         return slot >= 0 && slot < MaxPlayerSlots;
     }
+
 
     [ConsoleCommand("css_emsound", "Toggle custom weapon sounds")]
     [CommandHelper(0, "Toggle custom weapon sounds", CommandUsage.CLIENT_ONLY)]
@@ -1034,6 +881,9 @@ public class EmitSoundEditorPlugin : BasePlugin, IPluginConfig<EmitSoundEditorCo
 
         return GetCustomSoundEnabled(player.SteamID);
     }
+
+
+
 
     /// <summary>
     /// Returns the cached toggle state or the default.
